@@ -4,18 +4,18 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## ✦ Features
+## Features
 
-- 🎙 **Live Tab Audio Capture** — records audio from any browser tab playing a video
-- ⚡ **Groq Whisper Transcription** — blazing-fast, accurate transcription (whisper-large-v3)
-- 📝 **5 Notes Styles** — Exam Bullets, Cornell Notes, Detailed Outline, Flashcard Q&A, or Concise Summary
-- 🔒 **Secure Local Storage** — your API key is stored locally, never sent anywhere except Groq
-- 📋 **One-click Copy** — copy notes to clipboard instantly
-- 🖥 **Platform Aware** — special support for Canvas/Instructure and Panopto
+- **Live Tab Audio Capture** — records audio from any browser tab playing a video
+- **Groq Whisper Transcription** — blazing-fast, accurate transcription (whisper-large-v3)
+- **5 Notes Styles** — Exam Bullets, Cornell Notes, Detailed Outline, Flashcard Q&A, or Concise Summary
+- **Secure Local Storage** — your API key is stored locally, never sent anywhere except Groq
+- **One-click Copy** — copy notes to clipboard instantly
+- **Platform Aware** — special support for Canvas/Instructure and Panopto
 
 ---
 
-## 🚀 Setup (5 minutes)
+## Setup (5 minutes)
 
 ### Step 1 — Get a Groq API Key
 1. Go to [https://console.groq.com](https://console.groq.com)
@@ -37,7 +37,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## 📖 How to Use
+## How to Use
 
 1. **Navigate** to a Canvas course or Panopto lecture page
 2. **Start the video** playing
@@ -51,7 +51,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## ⚙ Model Recommendations
+## Model Recommendations
 
 | Model | Speed | Accuracy | Best For |
 |-------|-------|----------|----------|
@@ -61,7 +61,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## 📝 Notes Styles
+## Notes Styles
 
 | Style | Output |
 |-------|--------|
@@ -73,7 +73,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 **"Could not capture tab audio"**
 - Make sure a video is actively playing in the tab
@@ -92,7 +92,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## 🔒 Privacy
+## Privacy
 
 - Audio is only sent to `api.groq.com` for transcription
 - No data is stored on any servers — everything is local
@@ -101,7 +101,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ---
 
-## 📦 File Structure
+## File Structure
 
 ```
 lecture-scribe-extension/
