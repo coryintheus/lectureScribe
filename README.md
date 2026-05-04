@@ -1,6 +1,6 @@
 # LectureScribe — AI Exam Notes Chrome Extension
 
-Transcribe video lectures on Canvas, Panopto, and other platforms in real time using **Groq Whisper**, then summarize them into exam-ready notes with **Groq LLaMA**.
+Transcribe video lectures on Canvas, Panopto, and other platforms in real time using Groq Whisper, then summarize them into exam-ready notes with Groq LLaMA.
 
 ---
 
@@ -17,20 +17,20 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ## Setup (5 minutes)
 
-### Step 1 — Get a Groq API Key
+### 1 — Get a Groq API Key
 1. Go to [https://console.groq.com](https://console.groq.com)
 2. Sign up for a free account
 3. Navigate to **API Keys** → **Create API Key**
 4. Copy the key (starts with `gsk_`)
 
-### Step 2 — Load the Extension in Chrome
+### 2 — Load the Extension in Chrome
 1. Open Chrome and navigate to `chrome://extensions`
 2. Enable **Developer Mode** (toggle in top-right)
 3. Click **Load unpacked**
 4. Select the `lecture-scribe-extension` folder
 5. The LectureScribe icon will appear in your toolbar
 
-### Step 3 — Configure
+### 3 — Configure
 1. Click the LectureScribe icon
 2. Paste your Groq API key and click **Save**
 3. Choose your preferred Whisper model and notes style
