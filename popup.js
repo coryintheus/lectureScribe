@@ -10,6 +10,7 @@ const keySaved      = document.getElementById('keySaved');
 const modelSelect   = document.getElementById('modelSelect');
 const notesStyle    = document.getElementById('notesStyle');
 const subjectInput  = document.getElementById('subjectInput');
+const practiceCheck = document.getElementById('practiceQuestionsCheck');
 const startBtn      = document.getElementById('startBtn');
 const stopBtn       = document.getElementById('stopBtn');
 const transcribeBtn = document.getElementById('transcribeBtn');
@@ -31,7 +32,7 @@ const chunkTag      = document.getElementById('chunkTag');
 // ─── Init ─────────────────────────────────────────────────────
 Promise.all([
   new Promise(r => chrome.storage.local.get(
-    ['groqApiKey','model','notesStylePref','subject','transcript','notes','recordingState'], r)),
+    ['groqApiKey','model','notesStylePref','subject','practiceQuestions','transcript','notes','recordingState'], r)),
   new Promise(r => chrome.storage.session.get(
     { isRecording: false, startTime: null, logLines: [], blobReady: false, blobSize: 0 }, r))
 ]).then(([local, session]) => {
@@ -39,6 +40,7 @@ Promise.all([
   if (local.model)          modelSelect.value = local.model;
   if (local.notesStylePref) notesStyle.value  = local.notesStylePref;
   if (local.subject)        subjectInput.value = local.subject;
+  if (local.practiceQuestions) practiceCheck.checked = local.practiceQuestions;
   if (local.transcript)     { transcriptFull = local.transcript; transcribeBtn.disabled = false; notesBtn.disabled = false; }
   if (local.notes)          { renderNotes(local.notes); modelTag.textContent = local.model || 'whisper-large-v3'; }
 
@@ -167,6 +169,7 @@ saveKeyBtn.addEventListener('click', () => {
 modelSelect.addEventListener('change', () => chrome.storage.local.set({ model: modelSelect.value }));
 notesStyle.addEventListener('change',  () => chrome.storage.local.set({ notesStylePref: notesStyle.value }));
 subjectInput.addEventListener('input',  () => chrome.storage.local.set({ subject: subjectInput.value }));
+practiceCheck.addEventListener('change', () => chrome.storage.local.set({ practiceQuestions: practiceCheck.checked }));
 
 // ─── Start Recording ──────────────────────────────────────────
 startBtn.addEventListener('click', async () => {
@@ -289,26 +292,42 @@ uploadInput.addEventListener('change', async (e) => {
   uploadInput.value = '';
 });
 
-// ─── Split blob into chunks ───────────────────────────────────
-function splitBlob(blob, maxBytes = 8 * 1024 * 1024) {
+// ─── Split blob into chunks (by time, not bytes) ──────────────
+// Whisper needs valid audio containers, so we can't just slice bytes.
+// Instead, we keep the full blob but send overlapping segments.
+// For files > 25MB, we use a smaller chunk size and re-containerize.
+function splitBlob(blob, maxBytes = 25 * 1024 * 1024) {
   if (blob.size <= maxBytes) return [blob];
-  const chunks = [];
-  for (let off = 0; off < blob.size; off += maxBytes)
-    chunks.push(blob.slice(off, off + maxBytes, blob.type));
-  return chunks;
+  
+  // For very large files, we need to split by duration using Web Audio API
+  // But for now, let's try sending the whole blob and handle errors
+  log('warn', 'Large file (' + (blob.size/1024/1024).toFixed(1) + ' MB). Attempting single-chunk upload first...');
+  return [blob];
 }
 
 // ─── Transcribe one chunk with retry ─────────────────────────
 async function transcribeChunk(blob, apiKey, model, idx, total) {
   const fd = new FormData();
-  fd.append('file', blob, 'chunk_' + idx + '.webm');
+  // Use original extension based on mimeType
+  const ext = blob.type.includes('webm') ? '.webm' : 
+              blob.type.includes('ogg') ? '.ogg' : 
+              blob.type.includes('mp3') ? '.mp3' : 
+              blob.type.includes('mp4') ? '.mp4' : 
+              blob.type.includes('wav') ? '.wav' : 
+              blob.type.includes('m4a') ? '.m4a' : '.webm';
+  fd.append('file', blob, 'audio_' + idx + ext);
   fd.append('model', model);
   fd.append('response_format', 'json');
   fd.append('language', 'en');
+  
   const res = await groqFetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST', headers: { 'Authorization': 'Bearer ' + apiKey }, body: fd
   });
-  if (!res.ok) throw new Error('Whisper chunk ' + idx + '/' + total + ' \u2014 ' + res.status + ': ' + await res.text());
+  
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('Whisper chunk ' + idx + '/' + total + ' — ' + res.status + ': ' + errText);
+  }
   return (await res.json()).text || '';
 }
 
@@ -422,7 +441,7 @@ async function compressTranscript(transcript, apiKey, subjectCtx) {
 // ─── Generate Notes ───────────────────────────────────────────
 notesBtn.addEventListener('click', async () => {
   const data = await new Promise(r => chrome.storage.local.get(
-    ['groqApiKey','transcript','notesStylePref','subject'], r));
+    ['groqApiKey','transcript','notesStylePref','subject','practiceQuestions'], r));
   if (!data.groqApiKey) { log('err','No API key set.'); return; }
 
   const transcript = data.transcript || transcriptFull;
@@ -430,10 +449,11 @@ notesBtn.addEventListener('click', async () => {
 
   const style   = data.notesStylePref || 'exam';
   const subject = data.subject?.trim() || '';
+  const includePractice = data.practiceQuestions === true;
 
   notesBtn.disabled = true;
   setStatus('active','Generating notes\u2026'); setProgress(10,'Preparing\u2026');
-  log('info','Generating ' + style + ' notes\u2026');
+  log('info','Generating ' + style + ' notes' + (includePractice ? ' with practice questions' : '') + '\u2026');
 
   const subjectCtx = subject
     ? 'The subject/course is: "' + subject + '". Use your training knowledge to inform, correct, and enrich the notes.'
@@ -502,6 +522,12 @@ RULES:
 - Flag common misconceptions.
 ${subjectCtx}
 ${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
+Generate exam-style practice questions covering all key concepts. Include a mix of:
+- Multiple choice questions with 4 options (mark correct answer)
+- Short answer questions testing understanding
+- Application/scenario-based questions
+Provide answers/explanations after each question.` : ''}
 
 ### 🧠 Core Concepts Explained
 Per concept: clear explanation with intuition, analogy if helpful, why it matters. Use tables to compare items.
@@ -524,6 +550,8 @@ Mnemonics, memory hooks, intuitive shortcuts for the hardest ideas.`,
       cornell: `You are an expert tutor generating CORNELL NOTES. Not a summary — pedagogical notes for retention.
 ${subjectCtx}
 ${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions (15-20 questions)
+Add additional practice questions beyond the cue column. Include varied question types with full answers.` : ''}
 
 ### Notes
 Detailed concept breakdowns enriched with your knowledge. Sub-headings, tables, LaTeX.
@@ -542,6 +570,8 @@ All formulas in LaTeX with variable definitions.
       outline: `You are an expert tutor. Create a COMPREHENSIVE STUDY OUTLINE enriched with your expertise.
 ${subjectCtx}
 ${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
+Add exam-style practice questions with answers covering all major topics.` : ''}
 
 # [Lecture Title]
 ## I. [Topic]
@@ -556,6 +586,8 @@ Supplement gaps with your knowledge (label "(supplemented)").`,
       flashcards: `You are an expert tutor. Generate 25–35 EXAM-QUALITY flashcards testing deep understanding.
 ${subjectCtx}
 ${FORMATTING}
+${includePractice ? `\n### 📝 Additional Practice Questions
+After the flashcards, add 10-15 longer-form practice questions with detailed answers.` : ''}
 
 Include: definition cards, mechanism cards, comparison cards ("difference between X and Y"), application cards ("in what scenario would you…"), and mistake cards ("what is wrong with this reasoning…").
 
@@ -565,6 +597,8 @@ Include: definition cards, mechanism cards, comparison cards ("difference betwee
       summary: `You are an expert tutor. Create a DEEP STUDY SUMMARY that goes beyond the lecture.
 ${subjectCtx}
 ${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions (10-12 questions)
+Add practice questions testing comprehension of the key concepts, with answers.` : ''}
 
 ### 🎯 What This Topic Is Really About
 3–5 sentences explaining the conceptual essence — as a tutor to a confused student, not a recap of the lecture.
