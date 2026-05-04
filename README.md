@@ -18,22 +18,24 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 ## Setup (5 minutes)
 
 ### 1 — Get a Groq API Key
-1. Go to [https://console.groq.com](https://console.groq.com)
-2. Sign up for free account
-3. Navigate to **API Keys** → **Create API Key**
-4. Copy the key (starts with `gsk_`)
+1. go to [https://console.groq.com](https://console.groq.com)
+2. sign up for free account
+3. open to **API Keys** → **Create API Key**
+4. copy the key (starts with `gsk_`)
 
 ### 2 — Load the Extension in Chrome
-1. Open Chrome and navigate to `chrome://extensions`
-2. Enable **Developer Mode** (toggle in top-right)
-3. Click **Load unpacked**
-4. Select the `lecture-scribe-extension` folder
-5. The LectureScribe icon will appear in your toolbar
+1. download tbe zip folder and expand it
+2. open Chrome and open to `chrome://extensions`
+3. enable Developer Mode (toggle in top-right)
+4. click Load unpacked
+5. select the `lecture-scribe-extension v 1.{}` folder
+6. pin the lectureScribe extension to your toolbar (puzzle piece icon)
+7. the LectureScribe icon will appear in your toolbar
 
 ### 3 — Configure
-1. Click the LectureScribe icon
-2. Paste your Groq API key and click **Save**
-3. Choose your preferred Whisper model and notes style
+1. click the LectureScribe icon
+2. paste your Groq API key and click **Save**
+3. choose your preferred Whisper model and notes style
 
 ---
 
