@@ -7,8 +7,8 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 ## Features
 
 - **Live Tab Audio Capture** — records audio from any browser tab playing a video
-- **Groq Whisper Transcription** — blazing-fast, accurate transcription (whisper-large-v3)
-- **5 Notes Styles** — Exam Bullets, Cornell Notes, Detailed Outline, Flashcard Q&A, or Concise Summary
+- **Groq Whisper Transcription** — fast and accurate transcription (whisper-large-v3)
+- **5 Notes Styles** — exam bullets, Cornell notes, detailed outline, Flashcard Q&A, or concise summary
 - **Secure Local Storage** — your API key is stored locally, never sent anywhere except Groq
 - **One-click Copy** — copy notes to clipboard instantly
 - **Platform Aware** — special support for Canvas/Instructure and Panopto
@@ -19,7 +19,7 @@ Transcribe video lectures on Canvas, Panopto, and other platforms in real time u
 
 ### 1 — Get a Groq API Key
 1. Go to [https://console.groq.com](https://console.groq.com)
-2. Sign up for a free account
+2. Sign up for free account
 3. Navigate to **API Keys** → **Create API Key**
 4. Copy the key (starts with `gsk_`)
 
