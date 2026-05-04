@@ -1,0 +1,647 @@
+// ─── State ────────────────────────────────────────────────────
+let isRecording    = false;
+let transcriptFull = '';
+let uploadedBlob   = null;  // for file uploads, held in popup memory
+
+// ─── DOM refs ─────────────────────────────────────────────────
+const apiKeyInput   = document.getElementById('apiKeyInput');
+const saveKeyBtn    = document.getElementById('saveKeyBtn');
+const keySaved      = document.getElementById('keySaved');
+const modelSelect   = document.getElementById('modelSelect');
+const notesStyle    = document.getElementById('notesStyle');
+const subjectInput  = document.getElementById('subjectInput');
+const startBtn      = document.getElementById('startBtn');
+const stopBtn       = document.getElementById('stopBtn');
+const transcribeBtn = document.getElementById('transcribeBtn');
+const notesBtn      = document.getElementById('notesBtn');
+const uploadBtn     = document.getElementById('uploadBtn');
+const uploadInput   = document.getElementById('uploadInput');
+const progressFill  = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressPct   = document.getElementById('progressPct');
+const logBox        = document.getElementById('logBox');
+const notesOutput   = document.getElementById('notesOutput');
+const copyBtn       = document.getElementById('copyBtn');
+const clearBtn      = document.getElementById('clearBtn');
+const statusDot     = document.getElementById('statusDot');
+const statusText    = document.getElementById('statusText');
+const modelTag      = document.getElementById('modelTag');
+const chunkTag      = document.getElementById('chunkTag');
+
+// ─── Init ─────────────────────────────────────────────────────
+Promise.all([
+  new Promise(r => chrome.storage.local.get(
+    ['groqApiKey','model','notesStylePref','subject','transcript','notes','recordingState'], r)),
+  new Promise(r => chrome.storage.session.get(
+    { isRecording: false, startTime: null, logLines: [], blobReady: false, blobSize: 0 }, r))
+]).then(([local, session]) => {
+  if (local.groqApiKey)    { apiKeyInput.value = '\u2022'.repeat(20); keySaved.classList.remove('hidden'); }
+  if (local.model)          modelSelect.value = local.model;
+  if (local.notesStylePref) notesStyle.value  = local.notesStylePref;
+  if (local.subject)        subjectInput.value = local.subject;
+  if (local.transcript)     { transcriptFull = local.transcript; transcribeBtn.disabled = false; notesBtn.disabled = false; }
+  if (local.notes)          { renderNotes(local.notes); modelTag.textContent = local.model || 'whisper-large-v3'; }
+
+  (session.logLines || []).slice(-5).forEach(l => log(l.level || 'info', l.text));
+
+  if (session.isRecording) {
+    isRecording = true;
+    startBtn.disabled = true; stopBtn.disabled = false; stopBtn.classList.add('active');
+    setStatus('recording', 'Recording\u2026'); setProgress(0, 'Recording\u2026');
+    log('warn', 'Recording active \u2014 click Stop & Process when done.');
+  } else if (session.blobReady) {
+    startBtn.disabled = false; transcribeBtn.disabled = false;
+    setStatus('active', 'Audio Ready'); setProgress(100, 'Audio in memory \u2014 ready to transcribe');
+    const mb = session.blobSize ? (session.blobSize / 1024 / 1024).toFixed(1) + ' MB' : '';
+    if (!local.transcript) log('ok', 'Audio ready ' + mb + '. Click Transcribe.');
+  } else if (local.recordingState === 'recording') {
+    // Was recording, offscreen may still be stopping — poll
+    startBtn.disabled = true; stopBtn.disabled = true;
+    setProgress(50, 'Processing audio\u2026');
+    pollBlobReady();
+  } else {
+    setStatus(local.groqApiKey ? 'active' : '', local.groqApiKey ? 'API Key Set' : 'Idle');
+    if (local.transcript) log('ok', 'Transcript loaded (' + wordCount(local.transcript) + ' words).');
+    else log('info', 'LectureScribe ready. Save your Groq API key to begin.');
+  }
+});
+
+// ─── Helpers ──────────────────────────────────────────────────
+function log(type, msg) {
+  const time = new Date().toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.innerHTML = '<span class="time">'+time+'</span><span class="msg">'+msg+'</span>';
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+  chrome.storage.session.get({ logLines: [] }, ({ logLines }) => {
+    logLines.push({ level: type, text: msg, ts: Date.now() });
+    if (logLines.length > 30) logLines = logLines.slice(-30);
+    chrome.storage.session.set({ logLines });
+  });
+}
+function setStatus(type, text) {
+  statusDot.className = 'dot '+(type==='recording'?'recording':type==='active'?'active':'');
+  statusText.textContent = text;
+}
+function setProgress(pct, label) {
+  progressFill.style.width = pct + '%';
+  progressLabel.textContent = label;
+  progressPct.textContent = pct > 0 ? pct + '%' : '\u2014';
+}
+function wordCount(t) { return t.trim().split(/\s+/).filter(Boolean).length; }
+
+// ─── Groq fetch with retry-on-429 ────────────────────────────
+async function groqFetch(url, options, maxRetries = 5) {
+  let attempt = 0;
+  while (true) {
+    const res = await fetch(url, options);
+    if (res.status === 429 && attempt < maxRetries) {
+      // Parse retry-after from error body if present
+      let waitMs = Math.pow(2, attempt) * 8000; // 8s, 16s, 32s, 64s, 128s
+      try {
+        const body = await res.clone().json();
+        const msg  = body?.error?.message || '';
+        const match = msg.match(/try again in ([\d.]+)s/i);
+        if (match) waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000;
+      } catch(_) {}
+      attempt++;
+      log('warn', 'Rate limit hit. Waiting ' + Math.round(waitMs/1000) + 's before retry (' + attempt + '/' + maxRetries + ')\u2026');
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    return res;
+  }
+}
+
+// ─── Markdown → HTML renderer ────────────────────────────────
+function renderNotes(md) {
+  if (!md) return;
+  let h = md
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/((?:^|\n)\|.+\|[ \t]*(?:\n|$))+/g, tbl => {
+      const rows = tbl.trim().split('\n').map(r=>r.trim());
+      let out='<table>',isHead=true;
+      for(const row of rows){
+        if(/^\|[-:| ]+\|$/.test(row)){isHead=false;continue;}
+        const cells=row.replace(/^\||\|$/g,'').split('|');
+        const t=isHead?'th':'td';
+        out+='<tr>'+cells.map(c=>'<'+t+'>'+c.trim()+'</'+t+'>').join('')+'</tr>';
+        isHead=false;
+      }
+      return out+'</table>';
+    })
+    .replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\$\$([\s\S]+?)\$\$/g,'<div class="math">$$$1$$</div>')
+    .replace(/\$([^$\n]+?)\$/g,'<span class="math-inline">$$$1$$</span>')
+    .replace(/^#### (.+)$/gm,'<h4>$1</h4>').replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>')
+    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/~~(.+?)~~/g,'<del>$1</del>').replace(/^---+$/gm,'<hr>')
+    .replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>')
+    .replace(/^\d+\. (.+)$/gm,'<li class="ol">$1</li>')
+    .replace(/^[-*] (.+)$/gm,'<li class="ul">$1</li>')
+    .replace(/(<li class="ul">[\s\S]*?<\/li>)(\s*(?!<li))/g,m=>'<ul>'+m.replace(/ class="ul"/g,'')+'</ul>')
+    .replace(/(<li class="ol">[\s\S]*?<\/li>)(\s*(?!<li))/g,m=>'<ol>'+m.replace(/ class="ol"/g,'')+'</ol>')
+    .replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br>');
+  h='<p>'+h+'</p>';
+  h=h.replace(/<p>(<(?:h[1-4]|ul|ol|table|pre|blockquote|hr)[^>]*>)/g,'$1')
+     .replace(/(<\/(?:h[1-4]|ul|ol|table|pre|blockquote|hr)>)<\/p>/g,'$1');
+  notesOutput.innerHTML = h;
+  notesOutput.classList.add('rendered');
+}
+
+// ─── Save API Key ─────────────────────────────────────────────
+saveKeyBtn.addEventListener('click', () => {
+  const val = apiKeyInput.value.trim();
+  if (!val || val.startsWith('\u2022')) { log('warn','Enter a valid Groq API key (gsk_\u2026)'); return; }
+  chrome.storage.local.set({ groqApiKey: val }, () => {
+    apiKeyInput.value = '\u2022'.repeat(20);
+    keySaved.classList.remove('hidden');
+    setStatus('active','API Key Set');
+    log('ok','API key saved.');
+  });
+});
+modelSelect.addEventListener('change', () => chrome.storage.local.set({ model: modelSelect.value }));
+notesStyle.addEventListener('change',  () => chrome.storage.local.set({ notesStylePref: notesStyle.value }));
+subjectInput.addEventListener('input',  () => chrome.storage.local.set({ subject: subjectInput.value }));
+
+// ─── Start Recording ──────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+  const { groqApiKey } = await new Promise(r => chrome.storage.local.get(['groqApiKey'], r));
+  if (!groqApiKey) { log('err','Set your Groq API key first!'); return; }
+  startBtn.disabled = true;
+  log('info','Requesting tab audio capture\u2026');
+  chrome.runtime.sendMessage({ type: 'START_CAPTURE' }, (resp) => {
+    if (chrome.runtime.lastError || !resp?.success) {
+      startBtn.disabled = false;
+      log('err', resp?.error || chrome.runtime.lastError?.message || 'Capture failed.');
+      log('warn','Tip: Make sure the video tab is active and playing first.');
+      return;
+    }
+    isRecording = true;
+    stopBtn.disabled = false; stopBtn.classList.add('active');
+    setStatus('recording','Recording\u2026'); setProgress(0,'Recording audio\u2026');
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) =>
+      log('ok','Capturing: ' + (tab?.title || 'active tab')));
+  });
+});
+
+// ─── Stop Recording ───────────────────────────────────────────
+stopBtn.addEventListener('click', () => {
+  stopBtn.disabled = true; stopBtn.classList.remove('active');
+  setStatus('active','Processing\u2026'); setProgress(30,'Stopping capture\u2026');
+  log('info','Stopping recording\u2026');
+
+  chrome.runtime.sendMessage({ type: 'STOP_CAPTURE' }, (resp) => {
+    if (chrome.runtime.lastError) {
+      log('warn','Channel closed \u2014 polling for blob\u2026');
+      setProgress(50,'Waiting for audio\u2026');
+      pollBlobReady();
+      return;
+    }
+    isRecording = false; startBtn.disabled = false;
+    if (resp?.pending) {
+      setProgress(60,'Audio processing\u2026');
+      log('info','Audio stopping, please wait\u2026');
+      pollBlobReady();
+    } else if (resp?.blobReady) {
+      transcribeBtn.disabled = false;
+      setStatus('active','Audio Ready'); setProgress(100,'Audio ready in memory');
+      log('ok','Audio ready. Click Transcribe.');
+    } else {
+      log('err', resp?.error || 'Stop failed.');
+    }
+  });
+});
+
+// ─── Poll session.blobReady (no timeout) ─────────────────────
+function pollBlobReady(attempts = 0) {
+  chrome.storage.session.get({ blobReady: false, blobSize: 0 }, (sess) => {
+    if (sess.blobReady) {
+      isRecording = false; startBtn.disabled = false; transcribeBtn.disabled = false;
+      setStatus('active','Audio Ready'); setProgress(100,'Audio ready in memory');
+      const mb = sess.blobSize ? (sess.blobSize/1024/1024).toFixed(1) + ' MB' : '';
+      log('ok','Audio ready ' + mb + '. Click Transcribe.');
+    } else {
+      chrome.storage.local.get(['recordingState'], (loc) => {
+        if (loc.recordingState === 'error') {
+          isRecording = false; startBtn.disabled = false;
+          setStatus('','Error'); setProgress(0,'Failed');
+          log('err','Recording error. Try again.');
+          return;
+        }
+        if (attempts % 10 === 0 && attempts > 0)
+          log('info','Still processing audio\u2026 (' + Math.round(attempts*0.5) + 's)');
+        setTimeout(() => pollBlobReady(attempts + 1), 500);
+      });
+    }
+  });
+}
+
+// ─── Get blob from offscreen in chunks (bypasses storage limits) ─
+async function getBlobFromOffscreen() {
+  // First get metadata
+  const info = await new Promise(r => chrome.runtime.sendMessage({ type: 'GET_BLOB_INFO' }, r));
+  if (!info?.exists) throw new Error('No audio in offscreen memory. Did the extension reload? Please re-record.');
+
+  const CHUNK = 2 * 1024 * 1024; // fetch 2MB at a time to stay under message limits
+  const parts  = [];
+  let offset   = 0;
+
+  while (offset < info.size) {
+    const end  = Math.min(offset + CHUNK, info.size);
+    const resp = await new Promise(r =>
+      chrome.runtime.sendMessage({ type: 'GET_BLOB_CHUNK', start: offset, end }, r));
+    if (resp?.error) throw new Error('Blob fetch failed: ' + resp.error);
+    // dataUrl is a base64 chunk — decode to Uint8Array
+    const base64 = resp.dataUrl.split(',')[1];
+    const bin    = atob(base64);
+    const arr    = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    parts.push(arr);
+    offset = end;
+  }
+
+  const combined = new Uint8Array(parts.reduce((acc, a) => acc + a.byteLength, 0));
+  let pos = 0;
+  for (const p of parts) { combined.set(p, pos); pos += p.byteLength; }
+  return new Blob([combined], { type: info.mimeType });
+}
+
+// ─── Upload Audio File ────────────────────────────────────────
+uploadBtn.addEventListener('click', () => uploadInput.click());
+uploadInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const ok = /\.(mp3|mp4|wav|m4a|ogg|webm|aac|flac)$/i.test(file.name)
+             || file.type.startsWith('audio/') || file.type.startsWith('video/');
+  if (!ok) { log('err','Unsupported file type: ' + file.type); return; }
+
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  log('info','File loaded: ' + file.name + ' (' + sizeMB + ' MB)');
+  setProgress(100,'File ready'); setStatus('active','File Loaded');
+  uploadedBlob = file;  // hold in popup memory — same approach as offscreen blob
+  transcribeBtn.disabled = false;
+  log('ok','File ready. Click Transcribe.');
+  uploadInput.value = '';
+});
+
+// ─── Split blob into chunks ───────────────────────────────────
+function splitBlob(blob, maxBytes = 8 * 1024 * 1024) {
+  if (blob.size <= maxBytes) return [blob];
+  const chunks = [];
+  for (let off = 0; off < blob.size; off += maxBytes)
+    chunks.push(blob.slice(off, off + maxBytes, blob.type));
+  return chunks;
+}
+
+// ─── Transcribe one chunk with retry ─────────────────────────
+async function transcribeChunk(blob, apiKey, model, idx, total) {
+  const fd = new FormData();
+  fd.append('file', blob, 'chunk_' + idx + '.webm');
+  fd.append('model', model);
+  fd.append('response_format', 'json');
+  fd.append('language', 'en');
+  const res = await groqFetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + apiKey }, body: fd
+  });
+  if (!res.ok) throw new Error('Whisper chunk ' + idx + '/' + total + ' \u2014 ' + res.status + ': ' + await res.text());
+  return (await res.json()).text || '';
+}
+
+// ─── Transcribe ───────────────────────────────────────────────
+transcribeBtn.addEventListener('click', async () => {
+  const data = await new Promise(r => chrome.storage.local.get(['groqApiKey','model'], r));
+  if (!data.groqApiKey) { log('err','No API key set.'); return; }
+
+  transcribeBtn.disabled = true; notesBtn.disabled = true;
+  setStatus('active','Transcribing\u2026'); setProgress(5,'Loading audio\u2026');
+  log('info','Starting transcription\u2026');
+
+  try {
+    const model = data.model || 'whisper-large-v3';
+
+    // Source: uploaded file (popup memory) OR offscreen blob
+    let blob;
+    if (uploadedBlob) {
+      blob = uploadedBlob;
+      log('info','Using uploaded file: ' + (blob.size/1024/1024).toFixed(1) + ' MB');
+    } else {
+      log('info','Fetching audio from offscreen\u2026 (may take a moment for large recordings)');
+      setProgress(10,'Fetching audio chunks from offscreen\u2026');
+      blob = await getBlobFromOffscreen();
+    }
+
+    const totalMB = (blob.size / 1024 / 1024).toFixed(1);
+    const chunks  = splitBlob(blob, 8 * 1024 * 1024);
+    chunkTag.textContent = chunks.length > 1 ? chunks.length + ' chunks' : '';
+    log('info', totalMB + ' MB \u2192 ' + chunks.length + ' audio chunk(s).');
+
+    const parts = [];
+    for (let i = 0; i < chunks.length; i++) {
+      setProgress(Math.round(15 + (i / chunks.length) * 75),
+        chunks.length > 1 ? 'Whisper chunk ' + (i+1) + '/' + chunks.length + '\u2026' : 'Transcribing\u2026');
+      parts.push(await transcribeChunk(chunks[i], data.groqApiKey, model, i+1, chunks.length));
+      log('ok','Chunk ' + (i+1) + '/' + chunks.length + ' transcribed.');
+    }
+
+    transcriptFull = parts.join(' ').trim();
+    chrome.storage.local.set({ transcript: transcriptFull, model });
+    modelTag.textContent = model;
+    setProgress(100,'Transcription complete!');
+    log('ok','Done: ' + wordCount(transcriptFull) + ' words.');
+
+    notesOutput.innerHTML = '';
+    notesOutput.classList.remove('rendered');
+    notesOutput.textContent = '\uD83D\uDCDD TRANSCRIPT PREVIEW:\n\n'
+      + transcriptFull.slice(0, 600) + (transcriptFull.length > 600 ? '\u2026' : '');
+
+    transcribeBtn.disabled = false; notesBtn.disabled = false;
+    setStatus('active','Transcribed');
+
+  } catch(e) {
+    log('err','Transcription failed: ' + e.message);
+    setStatus('active','Error'); setProgress(0,'Failed');
+    transcribeBtn.disabled = false; notesBtn.disabled = !transcriptFull;
+  }
+});
+
+// ─── Compress transcript if too long (avoids TPM spikes) ──────
+// Splits transcript into sections, summarises each to key points only
+async function compressTranscript(transcript, apiKey, subjectCtx) {
+  const TARGET_TOKENS = 6000;   // ~4500 words — safe for correction + notes under 12k TPM
+  const approxTokens  = Math.round(wordCount(transcript) * 1.35);
+  if (approxTokens <= TARGET_TOKENS) return { text: transcript, compressed: false };
+
+  log('warn', 'Transcript is long (' + wordCount(transcript) + ' words). Compressing to key points first\u2026');
+
+  // Chunk transcript into ~1500-word sections, extract key points from each
+  const words    = transcript.split(/\s+/);
+  const SEC_SIZE = 1500;
+  const sections = [];
+  for (let i = 0; i < words.length; i += SEC_SIZE)
+    sections.push(words.slice(i, i + SEC_SIZE).join(' '));
+
+  log('info', 'Compressing ' + sections.length + ' transcript section(s)\u2026');
+
+  const summaries = [];
+  for (let i = 0; i < sections.length; i++) {
+    setProgress(Math.round(20 + (i / sections.length) * 20),
+      'Compressing section ' + (i+1) + '/' + sections.length + '\u2026');
+
+    const res = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'Extract ALL key concepts, facts, definitions, formulas, and important statements from this transcript section into a dense bullet-point list. ' + subjectCtx + ' Preserve all technical terms exactly. No prose, no padding — only information-dense bullets.' },
+          { role: 'user',   content: 'SECTION ' + (i+1) + '/' + sections.length + ':\n\n' + sections[i] }
+        ],
+        max_tokens: 1200,
+        temperature: 0.1
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error('Compression section ' + (i+1) + ' failed: ' + res.status + ' ' + err);
+    }
+    const r = await res.json();
+    summaries.push(r.choices?.[0]?.message?.content || '');
+    // Small pause between calls to spread TPM load
+    if (i < sections.length - 1) await new Promise(r => setTimeout(r, 3000));
+  }
+
+  return { text: summaries.join('\n\n'), compressed: true };
+}
+
+// ─── Generate Notes ───────────────────────────────────────────
+notesBtn.addEventListener('click', async () => {
+  const data = await new Promise(r => chrome.storage.local.get(
+    ['groqApiKey','transcript','notesStylePref','subject'], r));
+  if (!data.groqApiKey) { log('err','No API key set.'); return; }
+
+  const transcript = data.transcript || transcriptFull;
+  if (!transcript)  { log('err','No transcript. Transcribe first.'); return; }
+
+  const style   = data.notesStylePref || 'exam';
+  const subject = data.subject?.trim() || '';
+
+  notesBtn.disabled = true;
+  setStatus('active','Generating notes\u2026'); setProgress(10,'Preparing\u2026');
+  log('info','Generating ' + style + ' notes\u2026');
+
+  const subjectCtx = subject
+    ? 'The subject/course is: "' + subject + '". Use your training knowledge to inform, correct, and enrich the notes.'
+    : 'Infer the academic subject from context. Use your training knowledge to inform, correct, and enrich the notes.';
+
+  try {
+    // ── Step 1: Compress if transcript is too long ───────────────
+    const { text: workingText, compressed } = await compressTranscript(transcript, data.groqApiKey, subjectCtx);
+    if (compressed) log('ok', 'Transcript compressed to ~' + wordCount(workingText) + ' words.');
+
+    // ── Step 2: Correction pass ──────────────────────────────────
+    setProgress(42,'Correcting transcript errors\u2026');
+    log('info','Pass 1: Checking transcript against knowledge base\u2026');
+
+    const corrRes = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.groqApiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: `You are a knowledgeable academic assistant correcting a speech-to-text transcript.
+${subjectCtx}
+Fix mishearing errors (e.g. "N-replication problem" → "end-replication problem"), garbled technical terms, and phonetic approximations. Do NOT add new information — only fix misheard words.
+Return the corrected text followed by "## Corrections Made" listing each fix as [Original] → [Corrected] with a brief reason.` },
+          { role: 'user', content: 'TRANSCRIPT:\n\n' + workingText.slice(0, 12000) }
+        ],
+        max_tokens: 3000,
+        temperature: 0.1
+      })
+    });
+    if (!corrRes.ok) throw new Error('Correction pass: ' + corrRes.status + ' ' + await corrRes.text());
+    const corrResult    = await corrRes.json();
+    const correctedText = corrResult.choices?.[0]?.message?.content || workingText;
+
+    const corrMatch = correctedText.match(/## Corrections Made([\s\S]+)$/);
+    if (corrMatch) {
+      const fixes = corrMatch[1].trim().split('\n').filter(l => l.includes('\u2192'));
+      if (fixes.length) log('warn', fixes.length + ' correction(s): ' + fixes.slice(0,3).map(f=>f.trim()).join('; '));
+      else log('ok','No transcript errors detected.');
+    }
+
+    // Small pause to let TPM window recover
+    await new Promise(r => setTimeout(r, 4000));
+
+    // ── Step 3: Notes generation pass ───────────────────────────
+    setProgress(65,'Generating tutor notes\u2026');
+    log('info','Pass 2: Generating study notes\u2026');
+
+    const FORMATTING = `
+FORMATTING (mandatory):
+- **Bold** key terms on first use
+- Markdown tables for comparisons, structured lists, glossaries
+- LaTeX ($formula$) for ALL equations and formulas
+- \`code\` for code, syntax, or precise notation
+- > blockquote for formal definitions
+- ### headings for major sections
+- Numbered lists for processes; bullet lists for properties`;
+
+    const notePrompts = {
+      exam: `You are an expert tutor generating EXAM-READY STUDY NOTES. NOT a transcriber, NOT a summariser.
+
+RULES:
+- Teach the material as a tutor would — explain WHY, not just WHAT.
+- SUPPLEMENT with your own knowledge: add analogies, context, exam pitfalls the lecture may have missed. Label additions "(supplemented)".
+- Think like an examiner: what would be tested and how?
+- Flag common misconceptions.
+${subjectCtx}
+${FORMATTING}
+
+### 🧠 Core Concepts Explained
+Per concept: clear explanation with intuition, analogy if helpful, why it matters. Use tables to compare items.
+
+### 📐 Formulas, Equations & Notation
+Every formula in LaTeX. Each variable defined. Common application mistakes.
+
+### ⚠️ Common Misconceptions & Exam Traps
+What students get wrong. What trick questions look like for this topic.
+
+### 🔗 How It All Connects
+Table or prose linking the key concepts. Bigger picture context.
+
+### 📋 High-Yield Exam Points
+10–15 precise, testable facts/relationships. Exact terminology matters.
+
+### 💡 Tutor Tips
+Mnemonics, memory hooks, intuitive shortcuts for the hardest ideas.`,
+
+      cornell: `You are an expert tutor generating CORNELL NOTES. Not a summary — pedagogical notes for retention.
+${subjectCtx}
+${FORMATTING}
+
+### Notes
+Detailed concept breakdowns enriched with your knowledge. Sub-headings, tables, LaTeX.
+
+### Cue Column
+| Question / Cue | Key Answer Points |
+|----------------|------------------|
+15–20 self-test questions from foundational to advanced.
+
+### 📐 Formulas & Equations
+All formulas in LaTeX with variable definitions.
+
+### Summary
+6–8 sentence synthesis explaining the conceptual landscape — how ideas connect, what must be deeply understood vs memorised.`,
+
+      outline: `You are an expert tutor. Create a COMPREHENSIVE STUDY OUTLINE enriched with your expertise.
+${subjectCtx}
+${FORMATTING}
+
+# [Lecture Title]
+## I. [Topic]
+### A. Concept
+- **Definition**: (use > for formal)
+- **Explanation**: intuitive explanation beyond the lecture
+- **Formula**: $formula$ with variable meanings
+- **Example**: concrete example
+- **Common mistake**: what students get wrong
+Supplement gaps with your knowledge (label "(supplemented)").`,
+
+      flashcards: `You are an expert tutor. Generate 25–35 EXAM-QUALITY flashcards testing deep understanding.
+${subjectCtx}
+${FORMATTING}
+
+Include: definition cards, mechanism cards, comparison cards ("difference between X and Y"), application cards ("in what scenario would you…"), and mistake cards ("what is wrong with this reasoning…").
+
+| # | Question | Answer |
+|---|----------|--------|`,
+
+      summary: `You are an expert tutor. Create a DEEP STUDY SUMMARY that goes beyond the lecture.
+${subjectCtx}
+${FORMATTING}
+
+### 🎯 What This Topic Is Really About
+3–5 sentences explaining the conceptual essence — as a tutor to a confused student, not a recap of the lecture.
+
+### 🔑 Key Ideas (with depth)
+Each idea: what it is, why it exists, what it connects to.
+
+### 📐 Formulas & Equations
+| Formula (LaTeX) | Name | What It Describes | When to Use |
+
+### 📖 Glossary
+| Term | Precise Definition | Memory Hook |
+
+### ⚠️ Watch Out For
+Misconceptions, exam traps, edge cases.`
+    };
+
+    const notesRes = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.groqApiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: notePrompts[style] || notePrompts.exam },
+          { role: 'user',   content: 'CORRECTED TRANSCRIPT:\n\n' + correctedText.slice(0, 12000) }
+        ],
+        max_tokens: 5000,
+        temperature: 0.35
+      })
+    });
+    if (!notesRes.ok) throw new Error('Notes pass failed: ' + notesRes.status + ' ' + await notesRes.text());
+
+    const notesResult = await notesRes.json();
+    const notes       = notesResult.choices?.[0]?.message?.content || 'No notes returned.';
+
+    chrome.storage.local.set({ notes });
+    renderNotes(notes);
+    setProgress(100,'Notes ready!');
+    log('ok', style + ' notes done (' + wordCount(notes) + ' words).');
+    setStatus('active','Notes Ready');
+    notesBtn.disabled = false;
+
+  } catch(e) {
+    log('err','Notes failed: ' + e.message);
+    setStatus('active','Error'); setProgress(0,'Failed');
+    notesBtn.disabled = false;
+  }
+});
+
+// ─── Copy Notes ───────────────────────────────────────────────
+copyBtn.addEventListener('click', () => {
+  chrome.storage.local.get(['notes'], (d) => {
+    const text = d.notes || notesOutput.innerText;
+    if (!text || text.includes('Notes will appear')) { log('warn','No notes to copy.'); return; }
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = '\u2713 Copied!';
+      setTimeout(() => { copyBtn.textContent = '\u2358 Copy Notes'; }, 2000);
+      log('ok','Notes copied (markdown).');
+    });
+  });
+});
+
+// ─── Clear ────────────────────────────────────────────────────
+clearBtn.addEventListener('click', () => {
+  notesOutput.innerHTML = '<span class="notes-empty">Notes will appear here after processing\u2026</span>';
+  notesOutput.classList.remove('rendered');
+  transcriptFull = ''; uploadedBlob = null;
+  chrome.storage.local.remove(['transcript','notes','capturedAudio','recordingState']);
+  chrome.storage.session.remove(['logLines','blobReady','blobSize']);
+  transcribeBtn.disabled = true; notesBtn.disabled = true;
+  setProgress(0,'Ready'); setStatus('','Idle');
+  modelTag.textContent = ''; chunkTag.textContent = '';
+  log('info','Cleared.');
+});
+
+// ─── Background messages ──────────────────────────────────────
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'CAPTURE_PROGRESS') setProgress(msg.pct, msg.label);
+  if (msg.type === 'LOG') log(msg.level || 'info', msg.text);
+});
