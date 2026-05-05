@@ -4,7 +4,8 @@
 __pycache__/
 *.o
 *.obj
-*.class
+dist/
+build/
 *.exe
 *.dll
 *.so
@@ -12,12 +13,13 @@ __pycache__/
 *.out
 
 # Dependencies
-node_modules/
-venv/
 .venv/
-.env
-.env.local
-.env.*
+venv/
+node_modules/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
@@ -25,11 +27,20 @@ venv/
 *.swp
 *.swo
 
+# Environment
+.env
+.env.local
+*.env.*
+
 # Editors
 .vscode/
 .idea/
 
-# Coverage reports
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage
 coverage/
 htmlcov/
 .coverage
@@ -57,16 +68,4 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Build systems
-dist/
-build/
-target/
-.gradle/
-.mypy_cache/
-.pytest_cache/
 ```
