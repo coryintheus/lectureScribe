@@ -628,6 +628,19 @@
           <strong>📌 How to capture system audio:</strong> Click "Start Capture", then select the tab/window playing your lecture. 
           Enable "Share system audio" in the browser prompt. Works best in Chrome/Edge.
         </div>
+        
+        <!-- Video URL Input Section -->
+        <div style="margin-bottom:14px;">
+          <label class="preset-label" style="margin-bottom:6px;display:block;">🔗 Or enter a video URL (YouTube, Panopto, Vimeo, etc.):</label>
+          <div class="input-row" style="gap:8px;">
+            <input type="url" class="input-field" id="videoUrlInput" placeholder="https://youtube.com/watch?v=... or https://panopto.com/..." style="flex:1;"/>
+            <button class="btn" id="fetchVideoBtn">Fetch Audio</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">
+            ⚠️ Note: For YouTube videos, you may need to use a service like ytdl or download the audio separately. Direct URL fetching works for publicly accessible video files.
+          </div>
+        </div>
+        
         <div class="controls-grid">
           <button class="ctrl-btn" id="startBtn">
             <span class="icon">⏺</span>

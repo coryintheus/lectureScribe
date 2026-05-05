@@ -23,6 +23,8 @@ const transcribeBtn = document.getElementById('transcribeBtn');
 const notesBtn      = document.getElementById('notesBtn');
 const uploadBtn     = document.getElementById('uploadBtn');
 const uploadInput   = document.getElementById('uploadInput');
+const videoUrlInput = document.getElementById('videoUrlInput');
+const fetchVideoBtn = document.getElementById('fetchVideoBtn');
 const progressFill  = document.getElementById('progressFill');
 const progressLabel = document.getElementById('progressLabel');
 const progressPct   = document.getElementById('progressPct');
@@ -360,6 +362,76 @@ function stopRecording() {
 
 // ─── Stop Recording ───────────────────────────────────────────
 stopBtn.addEventListener('click', stopRecording);
+
+// ─── Fetch Video from URL ─────────────────────────────────────
+fetchVideoBtn.addEventListener('click', async () => {
+  const url = videoUrlInput.value.trim();
+  if (!url) { log('err','Please enter a video URL.'); return; }
+  
+  // Validate URL format
+  const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+  if (!urlPattern.test(url)) {
+    log('err','Invalid URL format.'); return;
+  }
+  
+  log('info','Fetching audio from: ' + url);
+  setProgress(10,'Downloading audio...');
+  setStatus('active','Fetching...');
+  fetchVideoBtn.disabled = true;
+  
+  try {
+    // For direct video/audio file URLs, we can fetch them directly
+    // For YouTube/Panopto, we need to use a proxy service or download tool
+    
+    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+    const isPanopto = url.includes('panopto.com') || url.includes('panopto.eu');
+    
+    if (isYouTube || isPanopto) {
+      // For these platforms, we need to guide the user to download first
+      log('warn','Direct fetching not supported for ' + (isYouTube ? 'YouTube' : 'Panopto') + '. Please use one of these options:');
+      log('info','Option 1: Use a browser extension like "Video DownloadHelper" to download the audio.');
+      log('info','Option 2: Play the video in another tab and use "Start Capture" to record system audio.');
+      log('info','Option 3: Download the video using an external tool, then upload the file.');
+      
+      // Provide helpful links
+      const downloadService = 'https://ytdl-org.github.io/youtube-dl/';
+      log('info','You can use tools like youtube-dl: ' + downloadService);
+      
+      setProgress(0,'Manual download required');
+      setStatus('active','Waiting for file upload');
+      fetchVideoBtn.disabled = false;
+      return;
+    }
+    
+    // Try to fetch directly (works for direct MP4/MP3 links)
+    const response = await fetch(url, { mode: 'cors' });
+    if (!response.ok) throw new Error('Failed to fetch: ' + response.status);
+    
+    const blob = await response.blob();
+    const contentType = blob.type;
+    
+    if (!contentType.startsWith('audio/') && !contentType.startsWith('video/')) {
+      throw new Error('URL does not point to audio/video content. Content-Type: ' + contentType);
+    }
+    
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+    log('info','Downloaded: ' + sizeMB + ' MB (' + contentType + ')');
+    
+    uploadedBlob = blob;
+    setProgress(100,'Audio ready');
+    setStatus('active','File Loaded');
+    transcribeBtn.disabled = false;
+    log('ok','Audio ready. Click Transcribe.');
+    
+  } catch(e) {
+    log('err','Fetch failed: ' + e.message);
+    log('info','Tip: If the URL requires authentication or has CORS restrictions, try downloading the file manually and uploading it instead.');
+    setProgress(0,'Failed');
+    setStatus('active','Error');
+  } finally {
+    fetchVideoBtn.disabled = false;
+  }
+});
 
 // ─── Upload Audio File ────────────────────────────────────────
 uploadBtn.addEventListener('click', () => uploadInput.click());
@@ -975,7 +1047,60 @@ generateQuizBtn.addEventListener('click', async () => {
   generateQuizBtn.textContent = '⏳ Generating...';
   
   try {
-    const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based on the following study material.
+    // Pre-process the content to extract key topics and context
+    log('info', 'Analyzing study material...');
+    
+    // First, get a summary of the content to provide better context
+    const analysisPrompt = `Analyze this study material and extract:
+1. The main subject/topic
+2. Key concepts covered (list 5-10)
+3. Technical terms that appear
+4. The academic level
+
+Return as JSON: {"subject": "...", "keyConcepts": ["...", "..."], "technicalTerms": ["...", "..."], "academicLevel": "..."}
+
+STUDY MATERIAL:
+${notesContent.slice(0, 8000)}`;
+
+    const analysisResponse = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqApiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an educational analyst. Return ONLY valid JSON, no markdown.' },
+          { role: 'user', content: analysisPrompt }
+        ],
+        max_tokens: 1000,
+        temperature: 0.3
+      })
+    });
+    
+    let contextInfo = { subject: 'the provided material', keyConcepts: [], technicalTerms: [] };
+    try {
+      const analysisText = analysisResponse.choices?.[0]?.message?.content || '{}';
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        contextInfo = JSON.parse(jsonMatch[0]);
+      }
+      log('info', 'Subject identified: ' + contextInfo.subject);
+    } catch(e) {
+      log('warn', 'Could not parse context, proceeding anyway');
+    }
+    
+    const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based STRICTLY on the following study material.
+
+IMPORTANT RULES:
+1. ALL questions MUST be directly based on content from the study material provided
+2. Do NOT invent facts, concepts, or information not present in the material
+3. If the material doesn't contain enough content for ${numQuestions} questions, generate fewer but accurate questions
+4. Use the exact terminology from the material
+5. For MCQs, make distractors plausible but clearly wrong based on the material
+
+CONTEXT ANALYSIS:
+- Subject: ${contextInfo.subject || 'the provided material'}
+- Key Concepts: ${(contextInfo.keyConcepts || []).join(', ') || 'see material'}
+- Technical Terms: ${(contextInfo.technicalTerms || []).join(', ') || 'see material'}
 
 EDUCATION LEVEL: ${eduLevel}
 DIFFICULTY: ${difficulty === '1' ? 'Level 1 - Basic recall and understanding' : difficulty === '2' ? 'Level 2 - Application of concepts' : difficulty === '3' ? 'Level 3 - Analysis, synthesis, and evaluation' : 'Mixed difficulty levels'}
@@ -986,10 +1111,10 @@ For each question, provide:
 - A unique ID (q1, q2, etc.)
 - Question type: "mcq", "shortanswer", or "calculation"
 - Difficulty level: 1, 2, or 3
-- The question text
+- The question text (must reference specific content from the material)
 - For MCQ: 4 options (A, B, C, D) with the correct answer letter
-- For shortanswer/calculation: the expected correct answer
-- A brief explanation of why the answer is correct
+- For shortanswer/calculation: the expected correct answer (must be from the material)
+- A brief explanation citing where in the material this comes from
 
 Return ONLY valid JSON in this exact format:
 {
@@ -1015,19 +1140,21 @@ Return ONLY valid JSON in this exact format:
 }
 
 STUDY MATERIAL:
-${notesContent.slice(0, 15000)}`;
+${notesContent.slice(0, 12000)}`;
 
+    log('info', 'Generating questions...');
+    
     const response = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqApiKey },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: 'You are an expert at creating educational assessments. Return ONLY valid JSON, no markdown formatting.' },
+          { role: 'system', content: 'You are an expert at creating educational assessments based ONLY on provided material. Return ONLY valid JSON, no markdown formatting. Each question must be directly derived from the study material.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: 4000,
-        temperature: 0.7
+        temperature: 0.5
       })
     });
     
@@ -1044,29 +1171,48 @@ ${notesContent.slice(0, 15000)}`;
       content = jsonMatch[0];
     }
     
-    const quizData = JSON.parse(content);
-    
-    if (!quizData.questions || !Array.isArray(quizData.questions)) {
-      throw new Error('Invalid response format from AI');
+    // Validate JSON before parsing
+    try {
+      const quizData = JSON.parse(content);
+      
+      if (!quizData.questions || !Array.isArray(quizData.questions)) {
+        throw new Error('Invalid response format: missing questions array');
+      }
+      
+      // Validate each question has required fields
+      for (let i = 0; i < quizData.questions.length; i++) {
+        const q = quizData.questions[i];
+        if (!q.id || !q.type || !q.question) {
+          throw new Error(`Question ${i+1} is missing required fields`);
+        }
+        if (q.type === 'mcq' && (!q.options || !q.correctAnswer)) {
+          throw new Error(`MCQ question ${i+1} is missing options or correctAnswer`);
+        }
+        if ((q.type === 'shortanswer' || q.type === 'calculation') && !q.correctAnswer) {
+          throw new Error(`Question ${i+1} is missing correctAnswer`);
+        }
+      }
+      
+      currentQuiz = {
+        questions: quizData.questions,
+        userAnswers: {},
+        submitted: false
+      };
+      
+      // Save to localStorage
+      localStorage.setItem('ls_currentQuiz', JSON.stringify(currentQuiz));
+      
+      // Show quiz UI
+      renderQuiz();
+      
+      log('ok', `Generated ${currentQuiz.questions.length} practice questions.`);
+    } catch (parseError) {
+      throw new Error('Invalid JSON response from AI: ' + parseError.message + '. Raw response: ' + content.slice(0, 500));
     }
-    
-    currentQuiz = {
-      questions: quizData.questions,
-      userAnswers: {},
-      submitted: false
-    };
-    
-    // Save to localStorage
-    localStorage.setItem('ls_currentQuiz', JSON.stringify(currentQuiz));
-    
-    // Show quiz UI
-    renderQuiz();
-    
-    log('ok', `Generated ${currentQuiz.questions.length} practice questions.`);
     
   } catch (e) {
     log('err', 'Quiz generation failed: ' + e.message);
-    alert('Failed to generate questions: ' + e.message);
+    alert('Failed to generate questions: ' + e.message + '\n\nTip: Make sure your study material contains sufficient content and try again.');
   } finally {
     generateQuizBtn.disabled = false;
     generateQuizBtn.textContent = '🚀 Generate Practice Questions';
