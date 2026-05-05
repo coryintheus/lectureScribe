@@ -1180,6 +1180,9 @@ CRITICAL RULES - READ CAREFULLY:
 5. For MCQs: All wrong options (distractors) must be plausible but clearly incorrect based SOLELY on the material
 6. Each question must cite or reference specific content from the material in its explanation
 7. DO NOT make up numbers, dates, names, or facts that aren't in the material
+8. AVOID questions about historical context, law history, or background information unless explicitly covered in the material
+9. Focus on core concepts, definitions, applications, and problem-solving from the material
+10. Ensure questions test understanding of the material content, not memorization of incidental details
 
 CONTEXT FROM ANALYSIS:
 - Subject: ${contextInfo.subject || 'the provided material'}
@@ -1605,6 +1608,7 @@ submitQuizBtn.addEventListener('click', () => {
 });
 
 function gradeQuiz() {
+  const total = currentQuiz.questions.length;
   let correct = 0;
   const results = [];
   
@@ -1616,7 +1620,15 @@ function gradeQuiz() {
       isCorrect = userAnswer === q.correctAnswer;
     } else {
       // For text answers, do simple string comparison (case-insensitive)
-      isCorrect = userAnswer?.toLowerCase().trim().includes(q.correctAnswer.toLowerCase().trim().slice(0, 20));
+      const userAns = (userAnswer || '').toLowerCase().trim();
+      const correctAns = (q.correctAnswer || '').toLowerCase().trim();
+      // Check if user answer contains key parts of the correct answer
+      const correctWords = correctAns.split(/\s+/).filter(w => w.length > 3);
+      if (correctWords.length > 0) {
+        isCorrect = correctWords.every(word => userAns.includes(word));
+      } else {
+        isCorrect = userAns.includes(correctAns.slice(0, 20));
+      }
     }
     
     if (isCorrect) correct++;
@@ -1635,7 +1647,7 @@ function gradeQuiz() {
   resultsSection.classList.remove('hidden');
   
   scoreDisplay.textContent = `${correct}/${total}`;
-  scorePercent.textContent = `${Math.round((correct / total) * 100)}% correct`;
+  scorePercent.textContent = total > 0 ? `${Math.round((correct / total) * 100)}% correct` : '0% correct';
   
   // Show detailed results
   resultsDetails.innerHTML = '';
