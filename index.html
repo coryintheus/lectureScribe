@@ -527,7 +527,6 @@
 <div class="tab-nav">
   <button class="tab-btn active" data-tab="notes-tab">📝 Notes & Recording</button>
   <button class="tab-btn" data-tab="practice-tab">📚 Practice Quiz</button>
-  <button class="tab-btn" data-tab="save-tab">💾 Save Progress</button>
 </div>
 
 <!-- ─── Main Content ─── -->
@@ -689,21 +688,14 @@
   <div class="tab-content" id="practice-tab">
     <div style="display:flex;flex-direction:column;gap:20px;">
 
-    <!-- Upload Notes Section -->
+    <!-- Quiz Topic Section -->
     <div class="section">
-      <div class="section-header">📤 Upload Study Materials</div>
+      <div class="section-header">📝 Describe Your Practice Questions</div>
       <div class="section-body">
         <div class="info-box" style="margin-bottom:12px;">
-          <strong>📌 Supported formats:</strong> PDF, TXT, DOCX, MD, or paste notes directly. AI will generate practice questions based on your content.
+          <strong>📌 How to use:</strong> Simply describe what kind of practice questions you want (e.g., "Hess's Law questions", "VSEPR practice problems", "thermodynamics calculations", etc.). AI will generate relevant practice questions for you.
         </div>
-        <div class="input-row" style="flex-wrap:wrap;gap:10px;">
-          <input type="file" id="quizFileInput" accept=".pdf,.txt,.docx,.md,.rtf" style="flex:1;min-width:200px;"/>
-          <button class="btn" id="loadFileBtn">📄 Extract Text</button>
-        </div>
-        <div style="margin-top:12px;">
-          <label class="preset-label" style="margin-bottom:6px;display:block;">Or paste your notes:</label>
-          <textarea id="quizNotesInput" class="short-answer-input" style="min-height:120px;" placeholder="Paste your lecture notes, study materials, or textbook excerpts here..."></textarea>
-        </div>
+        <textarea id="quizTopicInput" class="short-answer-input" style="min-height:100px;" placeholder="Describe the topic or type of questions you want to practice...&#10;&#10;Examples:&#10;- Hess's Law questions with enthalpy calculations&#10;- VSEPR theory - predict molecular geometry&#10;- Acid-base titration problems&#10;- Organic chemistry reaction mechanisms"></textarea>
       </div>
     </div>
 
@@ -805,55 +797,6 @@
 
   </div>
   <!-- End TAB 2: PRACTICE QUIZ -->
-
-  <!-- ════════════════════════════════════════════════════ -->
-  <!-- TAB 3: SAVE PROGRESS -->
-  <!-- ════════════════════════════════════════════════════ -->
-  <div class="tab-content" id="save-tab">
-    <div style="display:flex;flex-direction:column;gap:20px;">
-
-    <!-- Export Progress -->
-    <div class="section">
-      <div class="section-header">📤 Export Your Progress</div>
-      <div class="section-body">
-        <div class="info-box" style="margin-bottom:12px;">
-          <strong>📌 How to use:</strong> Copy the string below and save it somewhere safe. You can paste it in another browser to restore your progress.
-        </div>
-        <textarea id="exportString" class="string-output" readonly placeholder="Your progress data will appear here..."></textarea>
-        <div class="question-actions" style="margin-top:12px;">
-          <button class="btn" id="copyExportBtn">📋 Copy String</button>
-          <button class="btn secondary" id="refreshExportBtn">🔄 Refresh Data</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Import Progress -->
-    <div class="section">
-      <div class="section-header">📥 Import Progress</div>
-      <div class="section-body">
-        <div class="info-box" style="margin-bottom:12px;">
-          <strong>📌 Paste your saved string:</strong> Enter the progress string you copied from another browser to restore your data.
-        </div>
-        <textarea id="importString" class="string-output" placeholder="Paste your progress string here..."></textarea>
-        <div class="question-actions" style="margin-top:12px;">
-          <button class="btn success" id="importDataBtn">💾 Import Data</button>
-          <button class="btn danger" id="clearAllDataBtn">🗑️ Clear All Data</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Current Data Summary -->
-    <div class="section">
-      <div class="section-header">📊 Current Data Summary</div>
-      <div class="section-body">
-        <div id="dataSummary" style="font-size:12px;line-height:1.8;color:var(--text-dim);">
-          Loading...
-        </div>
-      </div>
-    </div>
-
-  </div>
-  <!-- End TAB 3: SAVE PROGRESS -->
 
 </div>
 <!-- End container -->

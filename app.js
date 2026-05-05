@@ -945,9 +945,7 @@ let currentQuiz = {
 let savedQuestions = JSON.parse(localStorage.getItem('ls_savedQuestions') || '[]');
 
 // DOM refs for quiz
-const quizFileInput = document.getElementById('quizFileInput');
-const loadFileBtn = document.getElementById('loadFileBtn');
-const quizNotesInput = document.getElementById('quizNotesInput');
+const quizTopicInput = document.getElementById('quizTopicInput');
 const generateQuizBtn = document.getElementById('generateQuizBtn');
 const quizNumQuestions = document.getElementById('quizNumQuestions');
 const quizQuestionType = document.getElementById('quizQuestionType');
@@ -970,75 +968,6 @@ const scoreDisplay = document.getElementById('scoreDisplay');
 const scorePercent = document.getElementById('scorePercent');
 const resultsDetails = document.getElementById('resultsDetails');
 const savedQuestionsList = document.getElementById('savedQuestionsList');
-const exportString = document.getElementById('exportString');
-const importString = document.getElementById('importString');
-const copyExportBtn = document.getElementById('copyExportBtn');
-const refreshExportBtn = document.getElementById('refreshExportBtn');
-const importDataBtn = document.getElementById('importDataBtn');
-const clearAllDataBtn = document.getElementById('clearAllDataBtn');
-const dataSummary = document.getElementById('dataSummary');
-
-// Load file content with reliable text extraction for PDF, DOCX, TXT, MD
-loadFileBtn.addEventListener('click', async () => {
-  const file = quizFileInput.files[0];
-  if (!file) {
-    log('warn', 'Please select a file first.');
-    alert('Please select a file to upload.');
-    return;
-  }
-  
-  // Check file size (limit to 5MB for reasonable processing)
-  const maxSize = 5 * 1024 * 1024; // 5MB
-  if (file.size > maxSize) {
-    log('warn', 'File too large. Please use a file under 5MB or paste text directly.');
-    alert('File is too large. Please use a file under 5MB, or copy and paste the text content directly into the notes box.');
-    return;
-  }
-  
-  try {
-    let text = '';
-    const extension = file.name.split('.').pop().toLowerCase();
-    
-    log('info', 'Extracting text from ' + file.name + ' (' + extension + ')...');
-    
-    // Use appropriate extraction method based on file type
-    if (extension === 'pdf') {
-      // PDF extraction using PDF.js
-      text = await extractTextFromPDF(file);
-    } else if (extension === 'docx') {
-      // DOCX extraction using Mammoth.js
-      text = await extractTextFromDOCX(file);
-    } else if (extension === 'txt' || extension === 'md' || extension === 'rtf') {
-      // Plain text files - read directly
-      text = await file.text();
-    } else {
-      // Try reading as plain text as fallback
-      text = await file.text();
-    }
-    
-    // Validate that the file has actual text content
-    if (!text || text.trim().length < 50) {
-      log('warn', 'File appears to be empty or contains insufficient text.');
-      alert('The file appears to be empty or contains very little text. Please check the file or paste your notes directly.');
-      return;
-    }
-    
-    quizNotesInput.value = text;
-    log('ok', `Loaded ${file.name} (${text.length} characters)`);
-    
-    // Auto-detect if content looks like lecture notes
-    const hasStructure = /(^|\n)(#|##|###|\d+\.|\- |\* |Chapter|Section|Module|Lecture|Topic)/i.test(text);
-    if (hasStructure) {
-      log('info', 'Content appears to be structured notes - good for quiz generation!');
-    } else {
-      log('info', 'Tip: For best quiz results, ensure your notes have clear topics and key concepts.');
-    }
-  } catch (e) {
-    log('err', 'Failed to read file: ' + e.message);
-    console.error('File extraction error:', e);
-    alert('Failed to read the file: ' + e.message + '\n\nSupported formats: PDF, TXT, DOCX, MD, RTF');
-  }
-});
 
 // Extract text from PDF using PDF.js
 async function extractTextFromPDF(file) {
@@ -1101,10 +1030,10 @@ generateQuizBtn.addEventListener('click', async () => {
     return;
   }
   
-  const notesContent = quizNotesInput.value.trim();
-  if (!notesContent) {
-    log('warn', 'Please provide study material content.');
-    alert('Please upload a file or paste your notes before generating questions.');
+  const topicDescription = quizTopicInput.value.trim();
+  if (!topicDescription) {
+    log('warn', 'Please describe what kind of questions you want.');
+    alert('Please describe the topic or type of practice questions you want (e.g., "Hess\'s Law questions", "VSEPR practice problems").');
     return;
   }
   
@@ -1118,73 +1047,12 @@ generateQuizBtn.addEventListener('click', async () => {
   generateQuizBtn.textContent = '⏳ Generating...';
   
   try {
-    // Validate content quality before processing
-    const wordCount = notesContent.split(/\s+/).length;
-    if (wordCount < 100) {
-      throw new Error('Study material is too short (' + wordCount + ' words). Please provide at least 100 words of content for meaningful quiz generation.');
-    }
+    log('info', 'Generating questions about: ' + topicDescription + '...');
     
-    // Pre-process the content to extract key topics and context
-    log('info', 'Analyzing study material (' + wordCount + ' words)...');
-    
-    // First, get a summary of the content to provide better context
-    const analysisPrompt = `Analyze this study material and extract:
-1. The main subject/topic
-2. Key concepts covered (list 5-10)
-3. Technical terms that appear
-4. The academic level
+    const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based on the following topic description.
 
-Return as JSON: {"subject": "...", "keyConcepts": ["...", "..."], "technicalTerms": ["...", "..."], "academicLevel": "..."}
-
-STUDY MATERIAL:
-${notesContent.slice(0, 6000)}`;
-
-    const analysisResponse = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqApiKey },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: 'You are an educational analyst. Return ONLY valid JSON, no markdown, no explanations outside the JSON.' },
-          { role: 'user', content: analysisPrompt }
-        ],
-        max_tokens: 800,
-        temperature: 0.2
-      })
-    });
-    
-    let contextInfo = { subject: 'the provided material', keyConcepts: [], technicalTerms: [] };
-    try {
-      const analysisText = analysisResponse.choices?.[0]?.message?.content || '{}';
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        contextInfo = JSON.parse(jsonMatch[0]);
-      }
-      if (contextInfo.subject) {
-        log('info', 'Subject identified: ' + contextInfo.subject);
-      }
-      if (contextInfo.keyConcepts && contextInfo.keyConcepts.length > 0) {
-        log('info', 'Key concepts found: ' + contextInfo.keyConcepts.slice(0, 5).join(', ') + '...');
-      }
-    } catch(e) {
-      log('warn', 'Could not parse detailed context, will use material directly');
-    }
-    
-    const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based STRICTLY on the following study material.
-
-CRITICAL RULES - READ CAREFULLY:
-1. EVERY question MUST be directly answerable using ONLY information from the study material below
-2. Do NOT use any external knowledge, facts, or concepts not explicitly stated in the material
-3. If the material is insufficient for ${numQuestions} quality questions, generate fewer questions (quality over quantity)
-4. Use EXACT terminology, phrases, and wording from the material
-5. For MCQs: All wrong options (distractors) must be plausible but clearly incorrect based SOLELY on the material
-6. Each question must cite or reference specific content from the material in its explanation
-7. DO NOT make up numbers, dates, names, or facts that aren't in the material
-
-CONTEXT FROM ANALYSIS:
-- Subject: ${contextInfo.subject || 'the provided material'}
-- Key Concepts to focus on: ${(contextInfo.keyConcepts || []).slice(0, 8).join(', ') || 'extract from material'}
-- Technical Terms to use: ${(contextInfo.technicalTerms || []).slice(0, 10).join(', ') || 'extract from material'}
+TOPIC DESCRIPTION:
+${topicDescription}
 
 SETTINGS:
 - Education Level: ${eduLevel}
@@ -1196,10 +1064,10 @@ REQUIRED FORMAT FOR EACH QUESTION:
 - id: unique identifier like "q1", "q2", etc.
 - type: "mcq", "shortanswer", or "calculation"
 - difficulty: 1, 2, or 3
-- question: clear question text that references specific material content
-- For MCQ: options object with A, B, C, D keys AND correctAnswer letter
-- For shortanswer/calculation: correctAnswer with the expected response from the material
-- explanation: MUST include a quote or specific reference to where this comes from in the material
+- question: clear question text
+- For MCQ: options object with A, B, C, D keys AND correctAnswer letter (A, B, C, or D)
+- For shortanswer/calculation: correctAnswer with the expected response
+- explanation: brief explanation of why the answer is correct
 
 OUTPUT FORMAT - Return ONLY valid JSON, no markdown, no extra text:
 {
@@ -1208,26 +1076,23 @@ OUTPUT FORMAT - Return ONLY valid JSON, no markdown, no extra text:
       "id": "q1",
       "type": "mcq",
       "difficulty": 2,
-      "question": "Based on the material, what is...",
+      "question": "What is...",
       "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
       "correctAnswer": "B",
-      "explanation": "The material states: '[quote from material]'"
+      "explanation": "The correct answer is B because..."
     },
     {
       "id": "q2",
       "type": "shortanswer",
       "difficulty": 1,
-      "question": "According to the notes, define...",
-      "correctAnswer": "[exact definition from material]",
-      "explanation": "Found in section discussing: [reference]"
+      "question": "Define...",
+      "correctAnswer": "the definition here",
+      "explanation": "This is correct because..."
     }
   ]
-}
-
-STUDY MATERIAL TO USE (base ALL questions on this content only):
-${notesContent.slice(0, 10000)}`;
-
-    log('info', 'Generating questions focused on: ' + (contextInfo.subject || 'material topics') + '...');
+}`;
+    
+    log('info', 'Sending request to AI...');
     
     const response = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -1235,11 +1100,11 @@ ${notesContent.slice(0, 10000)}`;
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: 'You create quiz questions using ONLY the provided material. NEVER invent facts. Return ONLY raw JSON, no markdown code blocks, no explanations.' },
+          { role: 'system', content: 'You create quiz questions based on the topic description. Return ONLY raw JSON, no markdown code blocks, no explanations.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: 3500,
-        temperature: 0.3
+        temperature: 0.5
       })
     });
     
@@ -1261,7 +1126,6 @@ ${notesContent.slice(0, 10000)}`;
 
     log('info', 'Processing AI response...');
 
-    // Validate JSON before parsing
     try {
       const quizData = JSON.parse(content);
 
