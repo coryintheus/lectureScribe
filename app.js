@@ -929,12 +929,6 @@ tabBtns.forEach(btn => {
     if (tabId === 'save-tab') {
       refreshExportData();
     }
-    
-    // Refresh history tab
-    if (tabId === 'history-tab') {
-      renderQuizHistory();
-      renderSavedQuestionsHistory();
-    }
   });
 });
 
@@ -983,10 +977,6 @@ const refreshExportBtn = document.getElementById('refreshExportBtn');
 const importDataBtn = document.getElementById('importDataBtn');
 const clearAllDataBtn = document.getElementById('clearAllDataBtn');
 const dataSummary = document.getElementById('dataSummary');
-const quizHistoryList = document.getElementById('quizHistoryList');
-const savedQuestionsListHistory = document.getElementById('savedQuestionsListHistory');
-const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-const clearSavedBtn = document.getElementById('clearSavedBtn');
 
 // Load file content with reliable text extraction for PDF, DOCX, TXT, MD
 loadFileBtn.addEventListener('click', async () => {
@@ -1616,7 +1606,6 @@ submitQuizBtn.addEventListener('click', () => {
 
 function gradeQuiz() {
   let correct = 0;
-  const total = currentQuiz.questions.length;
   const results = [];
   
   currentQuiz.questions.forEach((q, idx) => {
@@ -1625,15 +1614,9 @@ function gradeQuiz() {
     
     if (q.type === 'mcq') {
       isCorrect = userAnswer === q.correctAnswer;
-    } else if (q.type === 'shortanswer' || q.type === 'calculation') {
+    } else {
       // For text answers, do simple string comparison (case-insensitive)
-      // Check if user answer contains key terms from correct answer
-      const normalizedUser = (userAnswer || '').toLowerCase().trim();
-      const normalizedCorrect = (q.correctAnswer || '').toLowerCase().trim();
-      // Check for partial match - at least 60% of words should match
-      const correctWords = normalizedCorrect.split(/\s+/).filter(w => w.length > 2);
-      const matchingWords = correctWords.filter(w => normalizedUser.includes(w));
-      isCorrect = matchingWords.length >= Math.max(1, Math.floor(correctWords.length * 0.6));
+      isCorrect = userAnswer?.toLowerCase().trim().includes(q.correctAnswer.toLowerCase().trim().slice(0, 20));
     }
     
     if (isCorrect) correct++;
@@ -1652,7 +1635,7 @@ function gradeQuiz() {
   resultsSection.classList.remove('hidden');
   
   scoreDisplay.textContent = `${correct}/${total}`;
-  scorePercent.textContent = `${total > 0 ? Math.round((correct / total) * 100) : 0}% correct`;
+  scorePercent.textContent = `${Math.round((correct / total) * 100)}% correct`;
   
   // Show detailed results
   resultsDetails.innerHTML = '';
@@ -1681,22 +1664,13 @@ function gradeQuiz() {
     resultsDetails.appendChild(div);
   });
   
-  // Save to history
-  const quizHistory = JSON.parse(localStorage.getItem('ls_quizHistory') || '[]');
-  quizHistory.push({
+  // Save results
+  localStorage.setItem('ls_quizResults', JSON.stringify({
     date: Date.now(),
     score: correct,
     total: total,
-    percent: total > 0 ? Math.round((correct / total) * 100) : 0,
-    results: results.map(r => ({
-      question: r.question.question,
-      type: r.question.type,
-      userAnswer: r.userAnswer,
-      correctAnswer: formatAnswer(r.question),
-      isCorrect: r.isCorrect
-    }))
-  });
-  localStorage.setItem('ls_quizHistory', JSON.stringify(quizHistory));
+    results
+  }));
   
   log('ok', `Quiz submitted! Score: ${correct}/${total}`);
 }
@@ -1881,212 +1855,3 @@ clearAllDataBtn.addEventListener('click', () => {
 
 // Initial load of saved questions
 renderSavedQuestions();
-
-// ════════════════════════════════════════════════════════════════
-// HISTORY & SAVED QUESTIONS TAB
-// ════════════════════════════════════════════════════════════════
-
-function renderQuizHistory() {
-  const quizHistory = JSON.parse(localStorage.getItem('ls_quizHistory') || '[]');
-  
-  if (quizHistory.length === 0) {
-    quizHistoryList.innerHTML = '<div style="color:var(--text-faint);font-style:italic;">No quiz results yet. Complete a practice quiz to see your history here.</div>';
-    return;
-  }
-  
-  quizHistoryList.innerHTML = '';
-  // Show most recent first
-  quizHistory.slice().reverse().forEach((quiz, idx) => {
-    const date = new Date(quiz.date).toLocaleString();
-    const card = document.createElement('div');
-    card.className = 'question-card';
-    card.style.borderColor = quiz.percent >= 70 ? 'var(--green)' : quiz.percent >= 40 ? 'var(--yellow)' : 'var(--red)';
-    card.innerHTML = `
-      <div class="question-header">
-        <span class="question-type">Quiz #${quizHistory.length - idx}</span>
-        <span style="color:${quiz.percent >= 70 ? 'var(--green)' : quiz.percent >= 40 ? 'var(--yellow)' : 'var(--red)'};">
-          ${quiz.score}/${quiz.total} (${quiz.percent}%)
-        </span>
-        <span style="color:var(--text-faint);font-size:10px;">${date}</span>
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">
-        <strong>Results:</strong><br/>
-        ${quiz.results.map((r, i) => `
-          <div style="padding:4px 0;border-bottom:1px solid var(--border);">
-            <span style="color:${r.isCorrect ? 'var(--green)' : 'var(--red)'};">${r.isCorrect ? '✓' : '✗'}</span>
-            Q${i+1}: ${r.question.substring(0, 80)}${r.question.length > 80 ? '...' : ''}
-          </div>
-        `).join('')}
-      </div>
-    `;
-    quizHistoryList.appendChild(card);
-  });
-}
-
-function renderSavedQuestionsHistory() {
-  if (savedQuestions.length === 0) {
-    savedQuestionsListHistory.innerHTML = '<div style="color:var(--text-faint);font-style:italic;">No saved questions yet. Click ⭐ on any question to save it.</div>';
-    return;
-  }
-  
-  savedQuestionsListHistory.innerHTML = '';
-  savedQuestions.forEach((q, idx) => {
-    const card = document.createElement('div');
-    card.className = 'question-card saved';
-    card.innerHTML = `
-      <div class="question-header">
-        <span class="question-type">${q.type}</span>
-        <span class="question-difficulty">Difficulty: ${q.difficulty}</span>
-        <button class="btn danger save-btn" onclick="removeSavedQuestionFromHistory(${idx})">Remove</button>
-      </div>
-      <div class="question-text"><strong>Q:</strong> ${q.question}</div>
-      <div style="font-size:11px;color:var(--green);margin:8px 0;">
-        <strong>A:</strong> ${formatAnswer(q)}
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);">
-        <em>${q.explanation}</em>
-      </div>
-    `;
-    savedQuestionsListHistory.appendChild(card);
-  });
-}
-
-window.removeSavedQuestionFromHistory = function(idx) {
-  savedQuestions.splice(idx, 1);
-  localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
-  renderSavedQuestionsHistory();
-  renderSavedQuestions();
-};
-
-clearHistoryBtn.addEventListener('click', () => {
-  if (!confirm('Are you sure you want to clear all quiz history? This cannot be undone.')) {
-    return;
-  }
-  localStorage.removeItem('ls_quizHistory');
-  log('info', 'Quiz history cleared.');
-  renderQuizHistory();
-});
-
-clearSavedBtn.addEventListener('click', () => {
-  if (!confirm('Are you sure you want to clear all saved questions? This cannot be undone.')) {
-    return;
-  }
-  savedQuestions = [];
-  localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
-  log('info', 'Saved questions cleared.');
-  renderSavedQuestionsHistory();
-  renderSavedQuestions();
-});
-
-// Update export/import to include quiz history
-const originalRefreshExportData = refreshExportData;
-refreshExportData = function() {
-  const quizHistory = JSON.parse(localStorage.getItem('ls_quizHistory') || '[]');
-  const exportData = {
-    version: 1,
-    exportedAt: Date.now(),
-    apiKeySet: !!localStorage.getItem('ls_groqApiKey'),
-    settings: {
-      model: localStorage.getItem('ls_model') || '',
-      notesStyle: localStorage.getItem('ls_notesStylePref') || '',
-      subject: localStorage.getItem('ls_subject') || '',
-      practiceQuestions: localStorage.getItem('ls_practiceQuestions') || '5'
-    },
-    transcript: localStorage.getItem('ls_transcript') || '',
-    notes: localStorage.getItem('ls_notes') || '',
-    savedQuestions: savedQuestions,
-    quizHistory: quizHistory
-  };
-
-  const jsonString = JSON.stringify(exportData);
-  const encoded = btoa(unescape(encodeURIComponent(jsonString)));
-  exportString.value = encoded;
-
-  updateDataSummary(exportData);
-};
-
-const originalUpdateDataSummary = updateDataSummary;
-updateDataSummary = function(data) {
-  const quizHistory = data.quizHistory || [];
-  const lines = [
-    `<strong>API Key:</strong> ${data.apiKeySet ? '✓ Saved' : 'Not set'}`,
-    `<strong>Model:</strong> ${data.settings.model || 'Default'}`,
-    `<strong>Notes Style:</strong> ${data.settings.notesStyle || 'Not set'}`,
-    `<strong>Subject:</strong> ${data.settings.subject || 'Not set'}`,
-    `<strong>Transcript:</strong> ${data.transcript ? wordCount(data.transcript) + ' words' : 'None'}`,
-    `<strong>Notes:</strong> ${data.notes ? wordCount(data.notes) + ' words' : 'None'}`,
-    `<strong>Saved Questions:</strong> ${data.savedQuestions.length}`,
-    `<strong>Quiz History:</strong> ${quizHistory.length} attempts`,
-    quizHistory.length > 0 ? `<strong>Last Quiz:</strong> ${quizHistory[quizHistory.length-1].score}/${quizHistory[quizHistory.length-1].total} (${quizHistory[quizHistory.length-1].percent}%)` : ''
-  ];
-
-  dataSummary.innerHTML = lines.filter(l => l).join('<br/>');
-};
-
-// Update import to include quiz history
-const originalImportHandler = importDataBtn.onclick;
-importDataBtn.addEventListener('click', () => {
-  const encoded = importString.value.trim();
-  if (!encoded) {
-    alert('Please paste an export string first.');
-    return;
-  }
-
-  try {
-    const decoded = decodeURIComponent(escape(atob(encoded)));
-    const data = JSON.parse(decoded);
-
-    if (!data.version) {
-      throw new Error('Invalid export format');
-    }
-
-    // Import data
-    if (data.settings.model) localStorage.setItem('ls_model', data.settings.model);
-    if (data.settings.notesStyle) localStorage.setItem('ls_notesStylePref', data.settings.notesStyle);
-    if (data.settings.subject) localStorage.setItem('ls_subject', data.settings.subject);
-    if (data.settings.practiceQuestions) localStorage.setItem('ls_practiceQuestions', data.settings.practiceQuestions);
-    if (data.transcript) localStorage.setItem('ls_transcript', data.transcript);
-    if (data.notes) localStorage.setItem('ls_notes', data.notes);
-    if (data.savedQuestions) {
-      savedQuestions = data.savedQuestions;
-      localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
-    }
-    if (data.quizHistory) {
-      localStorage.setItem('ls_quizHistory', JSON.stringify(data.quizHistory));
-    }
-
-    log('ok', 'Data imported successfully!');
-    alert('Data imported successfully! Refresh the page to see changes.');
-    refreshExportData();
-
-  } catch (e) {
-    log('err', 'Import failed: ' + e.message);
-    alert('Failed to import data. Please check that the string is valid.');
-  }
-});
-
-// Update clear all data to include quiz history
-const originalClearHandler = clearAllDataBtn.onclick;
-clearAllDataBtn.addEventListener('click', () => {
-  if (!confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
-    return;
-  }
-
-  localStorage.removeItem('ls_groqApiKey');
-  localStorage.removeItem('ls_model');
-  localStorage.removeItem('ls_notesStylePref');
-  localStorage.removeItem('ls_subject');
-  localStorage.removeItem('ls_practiceQuestions');
-  localStorage.removeItem('ls_transcript');
-  localStorage.removeItem('ls_notes');
-  localStorage.removeItem('ls_savedQuestions');
-  localStorage.removeItem('ls_quizResults');
-  localStorage.removeItem('ls_currentQuiz');
-  localStorage.removeItem('ls_quizHistory');
-
-  savedQuestions = [];
-
-  log('warn', 'All data cleared.');
-  alert('All data has been cleared. Refresh the page.');
-  refreshExportData();
-});
