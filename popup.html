@@ -443,6 +443,10 @@
           <option value="outline">Detailed Outline</option>
           <option value="flashcards">Flashcard Q&A</option>
           <option value="summary">Concise Summary</option>
+          <option value="concept">Concept Map</option>
+          <option value="problem">Problem-Solving Focus</option>
+          <option value="compare">Compare & Contrast</option>
+          <option value="timeline">Timeline/Sequence</option>
         </select>
       </div>
       <div class="input-row">
@@ -455,6 +459,34 @@
           <input type="checkbox" id="practiceQuestionsCheck" style="accent-color:var(--accent);width:16px;height:16px;"/>
           Add practice questions to notes
         </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="section">
+    <div class="section-header">📋 Activity Log</div>
+    <div class="section-body" style="padding:0;">
+      <div class="log-box" id="logBox">
+        <div class="log-line info"><span class="time">--:--</span><span class="msg">LectureScribe ready. Save your Groq API key to begin.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes Output (moved below log, above controls) -->
+  <div class="section" id="notesSection">
+    <div class="section-header">
+      ✦ Generated Notes
+      <span class="tag model" id="modelTag" style="margin-left:auto;"></span>
+      <span class="tag chunks" id="chunkTag"></span>
+    </div>
+    <div class="tab-content active" id="notesTabContent">
+      <div class="notes-output" id="notesOutput">
+        <span class="notes-empty">Notes will appear here after processing…</span>
+      </div>
+      <div class="notes-actions">
+        <button class="btn success" id="copyBtn" style="flex:1;">⎘ Copy Notes</button>
+        <button class="btn secondary" id="clearBtn">✕ Clear</button>
       </div>
     </div>
   </div>
@@ -493,34 +525,6 @@
           <span id="progressPct">—</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Log -->
-  <div class="section">
-    <div class="section-header">📋 Activity Log</div>
-    <div class="section-body" style="padding:0;">
-      <div class="log-box" id="logBox">
-        <div class="log-line info"><span class="time">--:--</span><span class="msg">LectureScribe ready. Save your Groq API key to begin.</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Notes Output -->
-  <div class="section" id="notesSection">
-    <div class="section-header">
-      ✦ Generated Notes
-      <span class="tag model" id="modelTag" style="margin-left:auto;"></span>
-      <span class="tag chunks" id="chunkTag"></span>
-    </div>
-    <div class="tab-content active" id="notesTabContent">
-      <div class="notes-output" id="notesOutput">
-        <span class="notes-empty">Notes will appear here after processing…</span>
-      </div>
-      <div class="notes-actions">
-        <button class="btn success" id="copyBtn" style="flex:1;">⎘ Copy Notes</button>
-        <button class="btn secondary" id="clearBtn">✕ Clear</button>
       </div>
     </div>
   </div>
