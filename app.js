@@ -10,57 +10,69 @@ let audioChunks    = [];
 let recordedStream = null;
 
 // ─── DOM refs ─────────────────────────────────────────────────
-const apiKeyInput   = document.getElementById('apiKeyInput');
-const saveKeyBtn    = document.getElementById('saveKeyBtn');
-const keySaved      = document.getElementById('keySaved');
-const modelSelect   = document.getElementById('modelSelect');
-const notesStyle    = document.getElementById('notesStyle');
-const subjectInput  = document.getElementById('subjectInput');
-const startBtn      = document.getElementById('startBtn');
-const stopBtn       = document.getElementById('stopBtn');
-const transcribeBtn = document.getElementById('transcribeBtn');
-const notesBtn      = document.getElementById('notesBtn');
-const uploadBtn     = document.getElementById('uploadBtn');
-const uploadInput   = document.getElementById('uploadInput');
-const progressFill  = document.getElementById('progressFill');
-const progressLabel = document.getElementById('progressLabel');
-const progressPct   = document.getElementById('progressPct');
-const logBox        = document.getElementById('logBox');
-const notesOutput   = document.getElementById('notesOutput');
-const copyBtn       = document.getElementById('copyBtn');
-const clearBtn      = document.getElementById('clearBtn');
-const statusDot     = document.getElementById('statusDot');
-const statusText    = document.getElementById('statusText');
-const modelTag      = document.getElementById('modelTag');
-const chunkTag      = document.getElementById('chunkTag');
-
-// Practice Questions DOM refs
-const pqNumQuestions = document.getElementById('pqNumQuestions');
-const pqQuestionType = document.getElementById('pqQuestionType');
-const pqDifficulty = document.getElementById('pqDifficulty');
-const pqShortAnswerType = document.getElementById('pqShortAnswerType');
-const pqEducationLevel = document.getElementById('pqEducationLevel');
-const fileUploadArea = document.getElementById('fileUploadArea');
-const pqFileInput = document.getElementById('pqFileInput');
-const generatePQBtn = document.getElementById('generatePQBtn');
-const clearPQBtn = document.getElementById('clearPQBtn');
-const questionsContainer = document.getElementById('questionsContainer');
-const pqActions = document.getElementById('pqActions');
-const submitPQBtn = document.getElementById('submitPQBtn');
-const regeneratePQBtn = document.getElementById('regeneratePQBtn');
-const savedQuestionsSection = document.getElementById('savedQuestionsSection');
-const savedQuestionsList = document.getElementById('savedQuestionsList');
-
-// Progress tab DOM refs
-const progressString = document.getElementById('progressString');
-const copyProgressBtn = document.getElementById('copyProgressBtn');
-const refreshProgressBtn = document.getElementById('refreshProgressBtn');
-const restoreStringInput = document.getElementById('restoreStringInput');
-const restoreProgressBtn = document.getElementById('restoreProgressBtn');
-const clearProgressBtn = document.getElementById('clearProgressBtn');
+let apiKeyInput, saveKeyBtn, keySaved, modelSelect, notesStyle, subjectInput;
+let startBtn, stopBtn, transcribeBtn, notesBtn, uploadBtn, uploadInput;
+let progressFill, progressLabel, progressPct, logBox, notesOutput;
+let copyBtn, clearBtn, statusDot, statusText, modelTag, chunkTag;
+let pqNumQuestions, pqQuestionType, pqDifficulty, pqShortAnswerType;
+let pqEducationLevel, fileUploadArea, pqFileInput, generatePQBtn, clearPQBtn;
+let questionsContainer, pqActions, submitPQBtn, regeneratePQBtn;
+let savedQuestionsSection, savedQuestionsList;
+let progressString, copyProgressBtn, refreshProgressBtn, restoreStringInput;
+let restoreProgressBtn, clearProgressBtn;
 
 // ─── Init ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Get DOM references
+  apiKeyInput   = document.getElementById('apiKeyInput');
+  saveKeyBtn    = document.getElementById('saveKeyBtn');
+  keySaved      = document.getElementById('keySaved');
+  modelSelect   = document.getElementById('modelSelect');
+  notesStyle    = document.getElementById('notesStyle');
+  subjectInput  = document.getElementById('subjectInput');
+  startBtn      = document.getElementById('startBtn');
+  stopBtn       = document.getElementById('stopBtn');
+  transcribeBtn = document.getElementById('transcribeBtn');
+  notesBtn      = document.getElementById('notesBtn');
+  uploadBtn     = document.getElementById('uploadBtn');
+  uploadInput   = document.getElementById('uploadInput');
+  progressFill  = document.getElementById('progressFill');
+  progressLabel = document.getElementById('progressLabel');
+  progressPct   = document.getElementById('progressPct');
+  logBox        = document.getElementById('logBox');
+  notesOutput   = document.getElementById('notesOutput');
+  copyBtn       = document.getElementById('copyBtn');
+  clearBtn      = document.getElementById('clearBtn');
+  statusDot     = document.getElementById('statusDot');
+  statusText    = document.getElementById('statusText');
+  modelTag      = document.getElementById('modelTag');
+  chunkTag      = document.getElementById('chunkTag');
+  
+  // Practice Questions DOM refs
+  pqNumQuestions = document.getElementById('pqNumQuestions');
+  pqQuestionType = document.getElementById('pqQuestionType');
+  pqDifficulty = document.getElementById('pqDifficulty');
+  pqShortAnswerType = document.getElementById('pqShortAnswerType');
+  pqEducationLevel = document.getElementById('pqEducationLevel');
+  fileUploadArea = document.getElementById('fileUploadArea');
+  pqFileInput = document.getElementById('pqFileInput');
+  generatePQBtn = document.getElementById('generatePQBtn');
+  clearPQBtn = document.getElementById('clearPQBtn');
+  questionsContainer = document.getElementById('questionsContainer');
+  pqActions = document.getElementById('pqActions');
+  submitPQBtn = document.getElementById('submitPQBtn');
+  regeneratePQBtn = document.getElementById('regeneratePQBtn');
+  savedQuestionsSection = document.getElementById('savedQuestionsSection');
+  savedQuestionsList = document.getElementById('savedQuestionsList');
+  
+  // Progress tab DOM refs
+  progressString = document.getElementById('progressString');
+  copyProgressBtn = document.getElementById('copyProgressBtn');
+  refreshProgressBtn = document.getElementById('refreshProgressBtn');
+  restoreStringInput = document.getElementById('restoreStringInput');
+  restoreProgressBtn = document.getElementById('restoreProgressBtn');
+  clearProgressBtn = document.getElementById('clearProgressBtn');
+  
   // Load settings from localStorage
   const local = JSON.parse(localStorage.getItem('lectureScribe') || '{}');
   
