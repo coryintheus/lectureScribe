@@ -52,6 +52,31 @@ document.addEventListener('DOMContentLoaded', () => {
   
   if (local.transcript) log('ok', 'Transcript loaded (' + wordCount(local.transcript) + ' words).');
   else log('info', 'LectureScribe ready. Save your Groq API key to begin.');
+  
+  // Quiz DOM refs - must be inside DOMContentLoaded
+  const quizTopicInput = document.getElementById('quizTopicInput');
+  const generateQuizBtn = document.getElementById('generateQuizBtn');
+  const quizNumQuestions = document.getElementById('quizNumQuestions');
+  const quizQuestionType = document.getElementById('quizQuestionType');
+  const quizDifficulty = document.getElementById('quizDifficulty');
+  const quizInputType = document.getElementById('quizInputType');
+  const quizEduLevel = document.getElementById('quizEduLevel');
+  const quizProgressSection = document.getElementById('quizProgressSection');
+  const questionsSection = document.getElementById('questionsSection');
+  const resultsSection = document.getElementById('resultsSection');
+  const savedQuestionsSection = document.getElementById('savedQuestionsSection');
+  const quizContainer = document.getElementById('quizContainer');
+  const quizProgressCheckpoints = document.getElementById('quizProgressCheckpoints');
+  const quizProgressLabel = document.getElementById('quizProgressLabel');
+  const quizProgressPct = document.getElementById('quizProgressPct');
+  const quizProgressFill = document.getElementById('quizProgressFill');
+  const submitQuizBtn = document.getElementById('submitQuizBtn');
+  const retryQuizBtn = document.getElementById('retryQuizBtn');
+  const newQuizBtn = document.getElementById('newQuizBtn');
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const scorePercent = document.getElementById('scorePercent');
+  const resultsDetails = document.getElementById('resultsDetails');
+  const savedQuestionsList = document.getElementById('savedQuestionsList');
 });
 
 // ─── Helpers ──────────────────────────────────────────────────
