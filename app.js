@@ -790,3 +790,723 @@ clearBtn.addEventListener('click', () => {
   log('info','Cleared.');
   saveSettings();
 });
+
+// ════════════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ════════════════════════════════════════════════════════════════
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.dataset.tab;
+    
+    // Remove active from all tabs
+    tabBtns.forEach(b => b.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+    
+    // Add active to selected tab
+    btn.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+    
+    // Refresh export data if switching to save tab
+    if (tabId === 'save-tab') {
+      refreshExportData();
+    }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// PRACTICE QUIZ FUNCTIONALITY
+// ════════════════════════════════════════════════════════════════
+
+let currentQuiz = {
+  questions: [],
+  userAnswers: {},
+  submitted: false
+};
+
+let savedQuestions = JSON.parse(localStorage.getItem('ls_savedQuestions') || '[]');
+
+// DOM refs for quiz
+const quizFileInput = document.getElementById('quizFileInput');
+const loadFileBtn = document.getElementById('loadFileBtn');
+const quizNotesInput = document.getElementById('quizNotesInput');
+const generateQuizBtn = document.getElementById('generateQuizBtn');
+const quizNumQuestions = document.getElementById('quizNumQuestions');
+const quizQuestionType = document.getElementById('quizQuestionType');
+const quizDifficulty = document.getElementById('quizDifficulty');
+const quizInputType = document.getElementById('quizInputType');
+const quizEduLevel = document.getElementById('quizEduLevel');
+const quizProgressSection = document.getElementById('quizProgressSection');
+const questionsSection = document.getElementById('questionsSection');
+const resultsSection = document.getElementById('resultsSection');
+const savedQuestionsSection = document.getElementById('savedQuestionsSection');
+const quizContainer = document.getElementById('quizContainer');
+const quizProgressCheckpoints = document.getElementById('quizProgressCheckpoints');
+const quizProgressLabel = document.getElementById('quizProgressLabel');
+const quizProgressPct = document.getElementById('quizProgressPct');
+const quizProgressFill = document.getElementById('quizProgressFill');
+const submitQuizBtn = document.getElementById('submitQuizBtn');
+const retryQuizBtn = document.getElementById('retryQuizBtn');
+const newQuizBtn = document.getElementById('newQuizBtn');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const scorePercent = document.getElementById('scorePercent');
+const resultsDetails = document.getElementById('resultsDetails');
+const savedQuestionsList = document.getElementById('savedQuestionsList');
+const exportString = document.getElementById('exportString');
+const importString = document.getElementById('importString');
+const copyExportBtn = document.getElementById('copyExportBtn');
+const refreshExportBtn = document.getElementById('refreshExportBtn');
+const importDataBtn = document.getElementById('importDataBtn');
+const clearAllDataBtn = document.getElementById('clearAllDataBtn');
+const dataSummary = document.getElementById('dataSummary');
+
+// Load file content
+loadFileBtn.addEventListener('click', async () => {
+  const file = quizFileInput.files[0];
+  if (!file) {
+    log('warn', 'Please select a file first.');
+    return;
+  }
+  
+  try {
+    const text = await file.text();
+    quizNotesInput.value = text;
+    log('ok', `Loaded ${file.name} (${text.length} characters)`);
+  } catch (e) {
+    log('err', 'Failed to read file: ' + e.message);
+  }
+});
+
+// Generate Quiz
+generateQuizBtn.addEventListener('click', async () => {
+  const groqApiKey = localStorage.getItem('ls_groqApiKey');
+  if (!groqApiKey) {
+    log('err', 'Please set your Groq API key first.');
+    alert('Please save your Groq API key in the Notes & Recording tab first.');
+    return;
+  }
+  
+  const notesContent = quizNotesInput.value.trim();
+  if (!notesContent) {
+    log('warn', 'Please provide study material content.');
+    alert('Please upload a file or paste your notes before generating questions.');
+    return;
+  }
+  
+  const numQuestions = parseInt(quizNumQuestions.value) || 10;
+  const questionType = quizQuestionType.value;
+  const difficulty = quizDifficulty.value;
+  const inputType = quizInputType.value;
+  const eduLevel = quizEduLevel.value || 'Undergraduate';
+  
+  generateQuizBtn.disabled = true;
+  generateQuizBtn.textContent = '⏳ Generating...';
+  
+  try {
+    const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based on the following study material.
+
+EDUCATION LEVEL: ${eduLevel}
+DIFFICULTY: ${difficulty === '1' ? 'Level 1 - Basic recall and understanding' : difficulty === '2' ? 'Level 2 - Application of concepts' : difficulty === '3' ? 'Level 3 - Analysis, synthesis, and evaluation' : 'Mixed difficulty levels'}
+QUESTION TYPE: ${questionType === 'mcq' ? 'Multiple Choice Questions only' : questionType === 'shortanswer' ? 'Short Answer questions only' : questionType === 'calculation' ? 'Calculation/Problem-solving questions only' : 'Mix of different question types'}
+INPUT METHOD FOR SHORT ANSWER: ${inputType === 'handwritten' ? 'Students will draw/write by hand on canvas' : 'Students will type text answers'}
+
+For each question, provide:
+- A unique ID (q1, q2, etc.)
+- Question type: "mcq", "shortanswer", or "calculation"
+- Difficulty level: 1, 2, or 3
+- The question text
+- For MCQ: 4 options (A, B, C, D) with the correct answer letter
+- For shortanswer/calculation: the expected correct answer
+- A brief explanation of why the answer is correct
+
+Return ONLY valid JSON in this exact format:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq",
+      "difficulty": 2,
+      "question": "What is...",
+      "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+      "correctAnswer": "B",
+      "explanation": "..."
+    },
+    {
+      "id": "q2",
+      "type": "shortanswer",
+      "difficulty": 1,
+      "question": "Define...",
+      "correctAnswer": "...",
+      "explanation": "..."
+    }
+  ]
+}
+
+STUDY MATERIAL:
+${notesContent.slice(0, 15000)}`;
+
+    const response = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqApiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an expert at creating educational assessments. Return ONLY valid JSON, no markdown formatting.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 4000,
+        temperature: 0.7
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to generate questions: ' + response.status);
+    }
+    
+    const result = await response.json();
+    let content = result.choices?.[0]?.message?.content || '';
+    
+    // Try to extract JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      content = jsonMatch[0];
+    }
+    
+    const quizData = JSON.parse(content);
+    
+    if (!quizData.questions || !Array.isArray(quizData.questions)) {
+      throw new Error('Invalid response format from AI');
+    }
+    
+    currentQuiz = {
+      questions: quizData.questions,
+      userAnswers: {},
+      submitted: false
+    };
+    
+    // Save to localStorage
+    localStorage.setItem('ls_currentQuiz', JSON.stringify(currentQuiz));
+    
+    // Show quiz UI
+    renderQuiz();
+    
+    log('ok', `Generated ${currentQuiz.questions.length} practice questions.`);
+    
+  } catch (e) {
+    log('err', 'Quiz generation failed: ' + e.message);
+    alert('Failed to generate questions: ' + e.message);
+  } finally {
+    generateQuizBtn.disabled = false;
+    generateQuizBtn.textContent = '🚀 Generate Practice Questions';
+  }
+});
+
+function renderQuiz() {
+  quizProgressSection.classList.remove('hidden');
+  questionsSection.classList.remove('hidden');
+  resultsSection.classList.add('hidden');
+  
+  quizContainer.innerHTML = '';
+  quizProgressCheckpoints.innerHTML = '';
+  
+  // Create progress checkpoints
+  currentQuiz.questions.forEach((q, idx) => {
+    const checkpoint = document.createElement('div');
+    checkpoint.className = 'progress-checkpoint';
+    checkpoint.id = `checkpoint-${idx}`;
+    checkpoint.innerHTML = `
+      <span class="check">○</span>
+      <span>Question ${idx + 1}</span>
+      <span class="question-type" style="margin-left:auto;">${q.type.toUpperCase()}</span>
+    `;
+    quizProgressCheckpoints.appendChild(checkpoint);
+  });
+  
+  // Render each question
+  currentQuiz.questions.forEach((q, idx) => {
+    const card = document.createElement('div');
+    card.className = 'question-card';
+    card.id = `question-${idx}`;
+    
+    let inputHtml = '';
+    
+    if (q.type === 'mcq') {
+      inputHtml = `<div class="mcq-options">`;
+      ['A', 'B', 'C', 'D'].forEach(opt => {
+        inputHtml += `
+          <label class="mcq-option" data-question="${idx}" data-option="${opt}">
+            <input type="radio" name="q${idx}" value="${opt}"/>
+            <strong>${opt}.</strong> ${q.options[opt]}
+          </label>
+        `;
+      });
+      inputHtml += `</div>`;
+    } else if (q.type === 'shortanswer') {
+      if (quizInputType.value === 'handwritten') {
+        inputHtml = `
+          <canvas class="handwritten-canvas" id="canvas-${idx}"></canvas>
+          <div class="question-actions">
+            <button class="btn secondary save-btn" onclick="clearCanvas(${idx})">Clear Canvas</button>
+          </div>
+        `;
+        setTimeout(() => initCanvas(idx), 100);
+      } else {
+        inputHtml = `
+          <textarea class="short-answer-input" id="answer-${idx}" placeholder="Type your answer here..."></textarea>
+        `;
+      }
+    } else if (q.type === 'calculation') {
+      inputHtml = `
+        <textarea class="calculation-work" id="work-${idx}" placeholder="Show your working here..."></textarea>
+        <input type="text" class="input-field" id="answer-${idx}" placeholder="Final answer..." style="width:100%;"/>
+      `;
+    }
+    
+    card.innerHTML = `
+      <div class="question-header">
+        <span class="question-type">${q.type}</span>
+        <span class="question-difficulty">Difficulty: ${q.difficulty}</span>
+      </div>
+      <div class="question-text"><strong>Q${idx + 1}:</strong> ${q.question}</div>
+      ${inputHtml}
+      <div class="question-actions">
+        <button class="btn secondary save-btn" onclick="toggleSaveQuestion(${idx})">⭐ Save Question</button>
+        <button class="btn secondary save-btn" onclick="toggleRevealAnswer(${idx})">👁 Reveal Answer</button>
+      </div>
+      <div class="reveal-answer" id="reveal-${idx}">
+        <strong>Correct Answer:</strong> ${formatAnswer(q)}<br/>
+        <strong>Explanation:</strong> ${q.explanation}
+      </div>
+    `;
+    
+    quizContainer.appendChild(card);
+  });
+  
+  // Add event listeners for MCQ options
+  document.querySelectorAll('.mcq-option').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'INPUT') {
+        const input = opt.querySelector('input');
+        input.checked = true;
+      }
+      const questionIdx = parseInt(opt.dataset.question);
+      const option = opt.dataset.option;
+      currentQuiz.userAnswers[questionIdx] = option;
+      updateProgress();
+    });
+  });
+  
+  // Add event listeners for text inputs
+  document.querySelectorAll('.short-answer-input, .calculation-work, #answer-').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const match = e.target.id.match(/answer-(\d+)/);
+      if (match) {
+        const questionIdx = parseInt(match[1]);
+        currentQuiz.userAnswers[questionIdx] = e.target.value;
+        updateProgress();
+      }
+    });
+  });
+  
+  document.getElementById('questionsCount').textContent = `${currentQuiz.questions.length} questions`;
+  updateProgress();
+  
+  // Initialize canvases
+  currentQuiz.questions.forEach((q, idx) => {
+    if (q.type === 'shortanswer' && quizInputType.value === 'handwritten') {
+      initCanvas(idx);
+    }
+  });
+}
+
+function initCanvas(idx) {
+  const canvas = document.getElementById(`canvas-${idx}`);
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  let isDrawing = false;
+  let lastX = 0;
+  let lastY = 0;
+  
+  // Set canvas size
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  
+  ctx.strokeStyle = '#e8e8f0';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  function startDrawing(e) {
+    isDrawing = true;
+    [lastX, lastY] = getCoords(e);
+  }
+  
+  function draw(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+    
+    const [x, y] = getCoords(e);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    [lastX, lastY] = [x, y];
+  }
+  
+  function stopDrawing() {
+    isDrawing = false;
+  }
+  
+  function getCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches) {
+      return [
+        e.touches[0].clientX - rect.left,
+        e.touches[0].clientY - rect.top
+      ];
+    }
+    return [e.offsetX, e.offsetY];
+  }
+  
+  canvas.addEventListener('mousedown', startDrawing);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stopDrawing);
+  canvas.addEventListener('mouseout', stopDrawing);
+  canvas.addEventListener('touchstart', startDrawing);
+  canvas.addEventListener('touchmove', draw);
+  canvas.addEventListener('touchend', stopDrawing);
+}
+
+window.clearCanvas = function(idx) {
+  const canvas = document.getElementById(`canvas-${idx}`);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+};
+
+window.toggleSaveQuestion = function(idx) {
+  const question = currentQuiz.questions[idx];
+  const existingIdx = savedQuestions.findIndex(q => q.id === question.id);
+  
+  if (existingIdx >= 0) {
+    savedQuestions.splice(existingIdx, 1);
+    log('info', 'Question removed from saved.');
+  } else {
+    savedQuestions.push({ ...question, savedAt: Date.now() });
+    log('ok', 'Question saved!');
+  }
+  
+  localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
+  renderSavedQuestions();
+  
+  const card = document.getElementById(`question-${idx}`);
+  if (existingIdx >= 0) {
+    card.classList.remove('saved');
+  } else {
+    card.classList.add('saved');
+  }
+};
+
+window.toggleRevealAnswer = function(idx) {
+  const reveal = document.getElementById(`reveal-${idx}`);
+  reveal.classList.toggle('visible');
+};
+
+function formatAnswer(q) {
+  if (q.type === 'mcq') {
+    return `${q.correctAnswer}. ${q.options[q.correctAnswer]}`;
+  }
+  return q.correctAnswer;
+}
+
+function updateProgress() {
+  const answered = Object.keys(currentQuiz.userAnswers).length;
+  const total = currentQuiz.questions.length;
+  const pct = Math.round((answered / total) * 100);
+  
+  quizProgressLabel.textContent = `Question ${answered} of ${total}`;
+  quizProgressPct.textContent = pct + '%';
+  quizProgressFill.style.width = pct + '%';
+  
+  // Update checkpoints
+  currentQuiz.questions.forEach((_, idx) => {
+    const checkpoint = document.getElementById(`checkpoint-${idx}`);
+    if (currentQuiz.userAnswers[idx] !== undefined) {
+      checkpoint.classList.add('completed');
+      checkpoint.querySelector('.check').textContent = '✓';
+    } else {
+      checkpoint.classList.remove('completed');
+      checkpoint.querySelector('.check').textContent = '○';
+    }
+  });
+}
+
+submitQuizBtn.addEventListener('click', () => {
+  const answered = Object.keys(currentQuiz.userAnswers).length;
+  const total = currentQuiz.questions.length;
+  
+  if (answered < total) {
+    if (!confirm(`You've answered ${answered} of ${total} questions. Submit anyway?`)) {
+      return;
+    }
+  }
+  
+  gradeQuiz();
+});
+
+function gradeQuiz() {
+  let correct = 0;
+  const results = [];
+  
+  currentQuiz.questions.forEach((q, idx) => {
+    const userAnswer = currentQuiz.userAnswers[idx];
+    let isCorrect = false;
+    
+    if (q.type === 'mcq') {
+      isCorrect = userAnswer === q.correctAnswer;
+    } else {
+      // For text answers, do simple string comparison (case-insensitive)
+      isCorrect = userAnswer?.toLowerCase().trim().includes(q.correctAnswer.toLowerCase().trim().slice(0, 20));
+    }
+    
+    if (isCorrect) correct++;
+    
+    results.push({
+      question: q,
+      userAnswer: userAnswer || '(no answer)',
+      isCorrect
+    });
+  });
+  
+  currentQuiz.submitted = true;
+  
+  // Show results
+  questionsSection.classList.add('hidden');
+  resultsSection.classList.remove('hidden');
+  
+  scoreDisplay.textContent = `${correct}/${total}`;
+  scorePercent.textContent = `${Math.round((correct / total) * 100)}% correct`;
+  
+  // Show detailed results
+  resultsDetails.innerHTML = '';
+  results.forEach((r, idx) => {
+    const div = document.createElement('div');
+    div.className = 'question-card';
+    div.style.borderColor = r.isCorrect ? 'var(--green)' : 'var(--red)';
+    div.innerHTML = `
+      <div class="question-header">
+        <span class="question-type">${r.question.type}</span>
+        <span style="color:${r.isCorrect ? 'var(--green)' : 'var(--red)'};">
+          ${r.isCorrect ? '✓ Correct' : '✗ Incorrect'}
+        </span>
+      </div>
+      <div class="question-text"><strong>Q${idx + 1}:</strong> ${r.question.question}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">
+        <strong>Your answer:</strong> ${r.userAnswer}
+      </div>
+      <div style="font-size:11px;color:var(--green);">
+        <strong>Correct answer:</strong> ${formatAnswer(r.question)}
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px;">
+        <em>${r.question.explanation}</em>
+      </div>
+    `;
+    resultsDetails.appendChild(div);
+  });
+  
+  // Save results
+  localStorage.setItem('ls_quizResults', JSON.stringify({
+    date: Date.now(),
+    score: correct,
+    total: total,
+    results
+  }));
+  
+  log('ok', `Quiz submitted! Score: ${correct}/${total}`);
+}
+
+retryQuizBtn.addEventListener('click', () => {
+  currentQuiz.userAnswers = {};
+  currentQuiz.submitted = false;
+  
+  // Clear all inputs
+  document.querySelectorAll('input[type="radio"]').forEach(i => i.checked = false);
+  document.querySelectorAll('.short-answer-input, .calculation-work').forEach(i => i.value = '');
+  document.querySelectorAll('.reveal-answer').forEach(r => r.classList.remove('visible'));
+  
+  resultsSection.classList.add('hidden');
+  questionsSection.classList.remove('hidden');
+  updateProgress();
+});
+
+newQuizBtn.addEventListener('click', () => {
+  quizProgressSection.classList.add('hidden');
+  questionsSection.classList.add('hidden');
+  resultsSection.classList.add('hidden');
+  savedQuestionsSection.classList.add('hidden');
+  quizNotesInput.value = '';
+  currentQuiz = { questions: [], userAnswers: {}, submitted: false };
+});
+
+function renderSavedQuestions() {
+  if (savedQuestions.length === 0) {
+    savedQuestionsList.innerHTML = '<div style="color:var(--text-faint);font-style:italic;">No saved questions yet. Click ⭐ on any question to save it.</div>';
+    return;
+  }
+  
+  savedQuestionsList.innerHTML = '';
+  savedQuestions.forEach((q, idx) => {
+    const card = document.createElement('div');
+    card.className = 'question-card saved';
+    card.innerHTML = `
+      <div class="question-header">
+        <span class="question-type">${q.type}</span>
+        <span class="question-difficulty">Difficulty: ${q.difficulty}</span>
+        <button class="btn danger save-btn" onclick="removeSavedQuestion(${idx})">Remove</button>
+      </div>
+      <div class="question-text"><strong>Q:</strong> ${q.question}</div>
+      <div style="font-size:11px;color:var(--green);margin:8px 0;">
+        <strong>A:</strong> ${formatAnswer(q)}
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);">
+        <em>${q.explanation}</em>
+      </div>
+    `;
+    savedQuestionsList.appendChild(card);
+  });
+  
+  savedQuestionsSection.classList.remove('hidden');
+}
+
+window.removeSavedQuestion = function(idx) {
+  savedQuestions.splice(idx, 1);
+  localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
+  renderSavedQuestions();
+};
+
+// ════════════════════════════════════════════════════════════════
+// SAVE/LOAD PROGRESS (EXPORT/IMPORT STRING)
+// ════════════════════════════════════════════════════════════════
+
+function refreshExportData() {
+  const exportData = {
+    version: 1,
+    exportedAt: Date.now(),
+    apiKeySet: !!localStorage.getItem('ls_groqApiKey'),
+    settings: {
+      model: localStorage.getItem('ls_model'),
+      notesStyle: localStorage.getItem('ls_notesStylePref'),
+      subject: localStorage.getItem('ls_subject'),
+      practiceQuestions: localStorage.getItem('ls_practiceQuestions')
+    },
+    transcript: localStorage.getItem('ls_transcript'),
+    notes: localStorage.getItem('ls_notes'),
+    savedQuestions: savedQuestions,
+    quizResults: JSON.parse(localStorage.getItem('ls_quizResults') || 'null')
+  };
+  
+  const jsonString = JSON.stringify(exportData);
+  const encoded = btoa(unescape(encodeURIComponent(jsonString)));
+  exportString.value = encoded;
+  
+  // Update summary
+  updateDataSummary(exportData);
+}
+
+function updateDataSummary(data) {
+  const lines = [
+    `<strong>API Key:</strong> ${data.apiKeySet ? '✓ Saved' : 'Not set'}`,
+    `<strong>Model:</strong> ${data.settings.model || 'Default'}`,
+    `<strong>Notes Style:</strong> ${data.settings.notesStyle || 'Not set'}`,
+    `<strong>Subject:</strong> ${data.settings.subject || 'Not set'}`,
+    `<strong>Transcript:</strong> ${data.transcript ? wordCount(data.transcript) + ' words' : 'None'}`,
+    `<strong>Notes:</strong> ${data.notes ? wordCount(data.notes) + ' words' : 'None'}`,
+    `<strong>Saved Questions:</strong> ${data.savedQuestions.length}`,
+    `<strong>Last Quiz:</strong> ${data.quizResults ? `${data.quizResults.score}/${data.quizResults.total} (${Math.round(data.quizResults.score/data.quizResults.total*100)}%)` : 'No results'}`
+  ];
+  
+  dataSummary.innerHTML = lines.join('<br/>');
+}
+
+refreshExportBtn.addEventListener('click', refreshExportData);
+
+copyExportBtn.addEventListener('click', () => {
+  if (!exportString.value) {
+    alert('No data to copy. Click "Refresh Data" first.');
+    return;
+  }
+  exportString.select();
+  document.execCommand('copy');
+  log('ok', 'Export string copied to clipboard!');
+  copyExportBtn.textContent = '✓ Copied!';
+  setTimeout(() => { copyExportBtn.textContent = '📋 Copy String'; }, 2000);
+});
+
+importDataBtn.addEventListener('click', () => {
+  const encoded = importString.value.trim();
+  if (!encoded) {
+    alert('Please paste an export string first.');
+    return;
+  }
+  
+  try {
+    const decoded = decodeURIComponent(escape(atob(encoded)));
+    const data = JSON.parse(decoded);
+    
+    if (!data.version) {
+      throw new Error('Invalid export format');
+    }
+    
+    // Import data
+    if (data.settings.model) localStorage.setItem('ls_model', data.settings.model);
+    if (data.settings.notesStyle) localStorage.setItem('ls_notesStylePref', data.settings.notesStyle);
+    if (data.settings.subject) localStorage.setItem('ls_subject', data.settings.subject);
+    if (data.settings.practiceQuestions) localStorage.setItem('ls_practiceQuestions', data.settings.practiceQuestions);
+    if (data.transcript) localStorage.setItem('ls_transcript', data.transcript);
+    if (data.notes) localStorage.setItem('ls_notes', data.notes);
+    if (data.savedQuestions) {
+      savedQuestions = data.savedQuestions;
+      localStorage.setItem('ls_savedQuestions', JSON.stringify(savedQuestions));
+    }
+    if (data.quizResults) localStorage.setItem('ls_quizResults', JSON.stringify(data.quizResults));
+    
+    log('ok', 'Data imported successfully!');
+    alert('Data imported successfully! Refresh the page to see changes.');
+    refreshExportData();
+    
+  } catch (e) {
+    log('err', 'Import failed: ' + e.message);
+    alert('Failed to import data. Please check that the string is valid.');
+  }
+});
+
+clearAllDataBtn.addEventListener('click', () => {
+  if (!confirm('Are you sure you want to delete ALL data? This cannot be undone.')) {
+    return;
+  }
+  
+  localStorage.removeItem('ls_groqApiKey');
+  localStorage.removeItem('ls_model');
+  localStorage.removeItem('ls_notesStylePref');
+  localStorage.removeItem('ls_subject');
+  localStorage.removeItem('ls_practiceQuestions');
+  localStorage.removeItem('ls_transcript');
+  localStorage.removeItem('ls_notes');
+  localStorage.removeItem('ls_savedQuestions');
+  localStorage.removeItem('ls_quizResults');
+  localStorage.removeItem('ls_currentQuiz');
+  
+  savedQuestions = [];
+  
+  log('warn', 'All data cleared.');
+  alert('All data has been cleared. Refresh the page.');
+  refreshExportData();
+});
+
+// Initial load of saved questions
+renderSavedQuestions();

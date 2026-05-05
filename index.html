@@ -100,6 +100,36 @@
     .dot.recording { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+    /* ─── Tab Navigation ─── */
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .tab-btn {
+      padding: 14px 24px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-dim);
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+    .tab-btn:hover { color: var(--text); background: rgba(124,109,250,0.05); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: rgba(124,109,250,0.08);
+    }
+
     /* ─── Main Container ─── */
     .container {
       max-width: 1200px;
@@ -113,6 +143,10 @@
     @media (max-width: 900px) {
       .container { grid-template-columns: 1fr; }
     }
+
+    /* ─── Tab Content ─── */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
 
     /* ─── Sections ─── */
     .section {
@@ -395,6 +429,77 @@
       margin-bottom: 10px;
     }
     .info-box strong { color: var(--accent); }
+
+    /* ─── Practice Quiz Styles ─── */
+    .quiz-container { display: flex; flex-direction: column; gap: 16px; }
+    .question-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .question-card.saved { border-color: var(--green); background: rgba(52,211,153,0.05); }
+    .question-header {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px;
+    }
+    .question-type {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+      padding: 2px 6px; border-radius: 4px; background: rgba(124,109,250,0.15); color: var(--accent);
+    }
+    .question-difficulty {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
+      padding: 2px 6px; border-radius: 4px; background: rgba(251,191,36,0.15); color: var(--yellow);
+    }
+    .question-text { font-size: 13px; line-height: 1.6; margin-bottom: 12px; color: var(--text); }
+    .mcq-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .mcq-option {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      cursor: pointer; transition: all 0.2s; font-size: 12px;
+    }
+    .mcq-option:hover { border-color: var(--accent); background: rgba(124,109,250,0.05); }
+    .mcq-option.selected { border-color: var(--accent); background: rgba(124,109,250,0.1); }
+    .mcq-option.correct { border-color: var(--green); background: rgba(52,211,153,0.1); }
+    .mcq-option.incorrect { border-color: var(--red); background: rgba(248,113,113,0.1); }
+    .mcq-option input { accent-color: var(--accent); width: 16px; height: 16px; }
+    .short-answer-input {
+      width: 100%; min-height: 80px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+      padding: 10px; resize: vertical; outline: none; transition: border-color 0.2s;
+    }
+    .short-answer-input:focus { border-color: var(--accent); }
+    .handwritten-canvas {
+      width: 100%; height: 150px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; cursor: crosshair; touch-action: none;
+    }
+    .question-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .save-btn { font-size: 10px; padding: 6px 10px; }
+    .reveal-answer {
+      margin-top: 10px; padding: 10px; background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.2); border-radius: 6px;
+      font-size: 12px; color: var(--green); display: none;
+    }
+    .reveal-answer.visible { display: block; }
+    .calculation-work {
+      width: 100%; min-height: 100px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+      padding: 10px; resize: vertical; outline: none; margin-bottom: 10px;
+    }
+    .quiz-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .preset-group { display: flex; flex-direction: column; gap: 4px; }
+    .preset-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .progress-checkpoint {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 11px; margin-bottom: 8px;
+    }
+    .progress-checkpoint.completed { border-color: var(--green); }
+    .progress-checkpoint .check { color: var(--green); }
+    .string-output {
+      width: 100%; min-height: 100px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px;
+      padding: 10px; resize: vertical; outline: none; word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -414,11 +519,21 @@
   </div>
 </div>
 
+<!-- ─── Tab Navigation ─── -->
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="notes-tab">📝 Notes & Recording</button>
+  <button class="tab-btn" data-tab="practice-tab">📚 Practice Quiz</button>
+  <button class="tab-btn" data-tab="save-tab">💾 Save Progress</button>
+</div>
+
 <!-- ─── Main Content ─── -->
 <div class="container">
 
-  <!-- Left Column -->
-  <div style="display:flex;flex-direction:column;gap:20px;">
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- TAB 1: NOTES & RECORDING -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="tab-content active" id="notes-tab">
+    <div style="display:flex;flex-direction:column;gap:20px;">
 
     <!-- API Key Section -->
     <div class="section">
@@ -548,8 +663,183 @@
     </div>
 
   </div>
+  </div>
+  <!-- End TAB 1: NOTES & RECORDING -->
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- TAB 2: PRACTICE QUIZ -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="practice-tab">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Upload Notes Section -->
+    <div class="section">
+      <div class="section-header">📤 Upload Study Materials</div>
+      <div class="section-body">
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>📌 Supported formats:</strong> PDF, TXT, DOCX, MD, or paste notes directly. AI will generate practice questions based on your content.
+        </div>
+        <div class="input-row" style="flex-wrap:wrap;gap:10px;">
+          <input type="file" id="quizFileInput" accept=".pdf,.txt,.docx,.md,.rtf" style="flex:1;min-width:200px;"/>
+          <button class="btn" id="loadFileBtn">Load File</button>
+        </div>
+        <div style="margin-top:12px;">
+          <label class="preset-label" style="margin-bottom:6px;display:block;">Or paste your notes:</label>
+          <textarea id="quizNotesInput" class="short-answer-input" style="min-height:120px;" placeholder="Paste your lecture notes, study materials, or textbook excerpts here..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quiz Presets Section -->
+    <div class="section">
+      <div class="section-header">⚙️ Quiz Settings</div>
+      <div class="section-body">
+        <div class="quiz-presets">
+          <div class="preset-group">
+            <label class="preset-label">Number of Questions</label>
+            <input type="number" id="quizNumQuestions" class="input-field" value="10" min="1" max="50"/>
+          </div>
+          <div class="preset-group">
+            <label class="preset-label">Question Types</label>
+            <select id="quizQuestionType" class="input-field">
+              <option value="mixed">Mixed (All Types)</option>
+              <option value="mcq">Multiple Choice Only</option>
+              <option value="shortanswer">Short Answer Only</option>
+              <option value="calculation">Calculation Problems</option>
+            </select>
+          </div>
+          <div class="preset-group">
+            <label class="preset-label">Difficulty Level</label>
+            <select id="quizDifficulty" class="input-field">
+              <option value="1">Level 1 - Basic Understanding</option>
+              <option value="2">Level 2 - Application</option>
+              <option value="3">Level 3 - Analysis & Synthesis</option>
+              <option value="mixed">Mixed Difficulty</option>
+            </select>
+          </div>
+          <div class="preset-group">
+            <label class="preset-label">Short Answer Input</label>
+            <select id="quizInputType" class="input-field">
+              <option value="text">Text Input</option>
+              <option value="handwritten">Handwritten (Canvas)</option>
+            </select>
+          </div>
+          <div class="preset-group">
+            <label class="preset-label">Education Level</label>
+            <input type="text" id="quizEduLevel" class="input-field" placeholder="e.g. High School, Undergraduate..." value="Undergraduate"/>
+          </div>
+        </div>
+        <button class="btn" id="generateQuizBtn" style="width:100%;">🚀 Generate Practice Questions</button>
+      </div>
+    </div>
+
+    <!-- Quiz Progress Section -->
+    <div class="section hidden" id="quizProgressSection">
+      <div class="section-header">📊 Progress</div>
+      <div class="section-body">
+        <div id="quizProgressCheckpoints"></div>
+        <div class="progress-wrap">
+          <div class="progress-label">
+            <span id="quizProgressLabel">Question 0 of 0</span>
+            <span id="quizProgressPct">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="quizProgressFill" style="width:0%;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Questions Container -->
+    <div class="section hidden" id="questionsSection">
+      <div class="section-header">
+        ✏️ Practice Questions
+        <span id="questionsCount" style="margin-left:auto;font-size:10px;color:var(--text-dim);"></span>
+      </div>
+      <div class="section-body">
+        <div id="quizContainer" class="quiz-container"></div>
+        <div class="question-actions" style="margin-top:20px;justify-content:center;">
+          <button class="btn success" id="submitQuizBtn" style="padding:12px 32px;">✓ Submit Answers</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="section hidden" id="resultsSection">
+      <div class="section-header">📈 Results</div>
+      <div class="section-body">
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:32px;font-weight:700;color:var(--accent);margin-bottom:8px;" id="scoreDisplay">0/0</div>
+          <div style="color:var(--text-dim);font-size:12px;" id="scorePercent">0% correct</div>
+        </div>
+        <div id="resultsDetails"></div>
+        <div class="question-actions" style="margin-top:20px;justify-content:center;">
+          <button class="btn" id="retryQuizBtn">🔄 Retry Quiz</button>
+          <button class="btn secondary" id="newQuizBtn">➕ New Quiz</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Saved Questions Section -->
+    <div class="section hidden" id="savedQuestionsSection">
+      <div class="section-header">⭐ Saved Questions</div>
+      <div class="section-body">
+        <div id="savedQuestionsList" class="quiz-container"></div>
+      </div>
+    </div>
+
+  </div>
+  <!-- End TAB 2: PRACTICE QUIZ -->
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- TAB 3: SAVE PROGRESS -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="save-tab">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Export Progress -->
+    <div class="section">
+      <div class="section-header">📤 Export Your Progress</div>
+      <div class="section-body">
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>📌 How to use:</strong> Copy the string below and save it somewhere safe. You can paste it in another browser to restore your progress.
+        </div>
+        <textarea id="exportString" class="string-output" readonly placeholder="Your progress data will appear here..."></textarea>
+        <div class="question-actions" style="margin-top:12px;">
+          <button class="btn" id="copyExportBtn">📋 Copy String</button>
+          <button class="btn secondary" id="refreshExportBtn">🔄 Refresh Data</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Progress -->
+    <div class="section">
+      <div class="section-header">📥 Import Progress</div>
+      <div class="section-body">
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>📌 Paste your saved string:</strong> Enter the progress string you copied from another browser to restore your data.
+        </div>
+        <textarea id="importString" class="string-output" placeholder="Paste your progress string here..."></textarea>
+        <div class="question-actions" style="margin-top:12px;">
+          <button class="btn success" id="importDataBtn">💾 Import Data</button>
+          <button class="btn danger" id="clearAllDataBtn">🗑️ Clear All Data</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Data Summary -->
+    <div class="section">
+      <div class="section-header">📊 Current Data Summary</div>
+      <div class="section-body">
+        <div id="dataSummary" style="font-size:12px;line-height:1.8;color:var(--text-dim);">
+          Loading...
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- End TAB 3: SAVE PROGRESS -->
 
 </div>
+<!-- End container -->
 
 <!-- ─── Footer ─── -->
 <div class="footer">
