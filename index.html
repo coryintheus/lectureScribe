@@ -527,9 +527,7 @@
 <div class="tab-nav">
   <button class="tab-btn active" data-tab="notes-tab">📝 Notes & Recording</button>
   <button class="tab-btn" data-tab="practice-tab">📚 Practice Quiz</button>
-  <button class="tab-btn" data-tab="history-tab">📊 Saved History</button>
   <button class="tab-btn" data-tab="save-tab">💾 Save Progress</button>
-  <button class="tab-btn" data-tab="help-tab">❓ How to Use</button>
 </div>
 
 <!-- ─── Main Content ─── -->
@@ -856,134 +854,6 @@
 
   </div>
   <!-- End TAB 3: SAVE PROGRESS -->
-
-  <!-- ════════════════════════════════════════════════════ -->
-  <!-- TAB 4: SAVED HISTORY -->
-  <!-- ════════════════════════════════════════════════════ -->
-  <div class="tab-content" id="history-tab">
-    <div style="display:flex;flex-direction:column;gap:20px;">
-
-    <!-- Saved Questions History -->
-    <div class="section">
-      <div class="section-header">⭐ Saved Questions History</div>
-      <div class="section-body">
-        <div id="savedQuestionsHistoryList" class="quiz-container"></div>
-        <div class="question-actions" style="margin-top:16px;">
-          <button class="btn danger" id="clearSavedQuestionsBtn">🗑️ Clear Saved Questions</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quiz Results History -->
-    <div class="section">
-      <div class="section-header">📈 Quiz Results History</div>
-      <div class="section-body">
-        <div id="quizResultsHistoryList" class="quiz-container"></div>
-        <div class="question-actions" style="margin-top:16px;">
-          <button class="btn danger" id="clearQuizResultsBtn">🗑️ Clear Quiz Results</button>
-        </div>
-      </div>
-    </div>
-
-  </div>
-  <!-- End TAB 4: SAVED HISTORY -->
-
-  <!-- ════════════════════════════════════════════════════ -->
-  <!-- TAB 5: HOW TO USE -->
-  <!-- ════════════════════════════════════════════════════ -->
-  <div class="tab-content" id="help-tab">
-    <div style="display:flex;flex-direction:column;gap:20px;">
-
-    <!-- Getting Started -->
-    <div class="section">
-      <div class="section-header">🚀 Getting Started</div>
-      <div class="section-body">
-        <div class="info-box" style="margin-bottom:16px;">
-          <strong>Welcome to LectureScribe!</strong> This tool helps you create AI-powered notes from lectures and generate practice quizzes to test your understanding.
-        </div>
-        <ol style="font-size:12px;line-height:2;color:var(--text-dim);padding-left:20px;">
-          <li><strong>Save your Groq API key</strong> in the "Notes & Recording" tab (get one free at <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>)</li>
-          <li><strong>Record a lecture</strong> by clicking "Start Capture" and selecting the tab/window with audio</li>
-          <li><strong>Transcribe the recording</strong> to get AI-generated notes</li>
-          <li><strong>Generate practice quizzes</strong> from your notes or uploaded study materials</li>
-          <li><strong>Save your progress</strong> to transfer between browsers or devices</li>
-        </ol>
-      </div>
-    </div>
-
-    <!-- Features Guide -->
-    <div class="section">
-      <div class="section-header">📖 Feature Guide</div>
-      <div class="section-body">
-        <div style="font-size:12px;line-height:1.8;color:var(--text-dim);">
-          <h4 style="color:var(--accent);margin-top:12px;margin-bottom:6px;">📝 Notes & Recording</h4>
-          <ul style="padding-left:20px;">
-            <li>Capture system audio from any browser tab</li>
-            <li>Upload PDF, DOCX, TXT, or MD files for transcription</li>
-            <li>Fetch YouTube videos for transcription</li>
-            <li>AI generates structured notes with headings, tables, and formatting</li>
-            <li>Optional practice questions generation</li>
-          </ul>
-
-          <h4 style="color:var(--accent);margin-top:12px;margin-bottom:6px;">📚 Practice Quiz</h4>
-          <ul style="padding-left:20px;">
-            <li>Upload study materials or paste notes</li>
-            <li>Customize quiz settings: question count, types, difficulty</li>
-            <li>Multiple choice, short answer, and calculation questions</li>
-            <li>Instant grading with detailed explanations</li>
-            <li>Save questions for later review</li>
-          </ul>
-
-          <h4 style="color:var(--accent);margin-top:12px;margin-bottom:6px;">📊 Saved History</h4>
-          <ul style="padding-left:20px;">
-            <li>View all saved questions from previous quizzes</li>
-            <li>Review past quiz results and scores</li>
-            <li>Clear history when needed</li>
-          </ul>
-
-          <h4 style="color:var(--accent);margin-top:12px;margin-bottom:6px;">💾 Save Progress</h4>
-          <ul style="padding-left:20px;">
-            <li>Export your data as an encoded string</li>
-            <li>Import data from another browser/device</li>
-            <li>Transfer progress between computers</li>
-            <li>View current data summary</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tips & Best Practices -->
-    <div class="section">
-      <div class="section-header">💡 Tips & Best Practices</div>
-      <div class="section-body">
-        <div style="font-size:12px;line-height:1.8;color:var(--text-dim);">
-          <p><strong style="color:var(--text);">For best transcription results:</strong></p>
-          <ul style="padding-left:20px;">
-            <li>Ensure clear audio quality in the source tab</li>
-            <li>On macOS, make sure to check "Share system audio" in the capture prompt</li>
-            <li>Break long lectures into smaller chunks if needed</li>
-          </ul>
-
-          <p><strong style="color:var(--text);margin-top:12px;display:block;">For better quiz generation:</strong></p>
-          <ul style="padding-left:20px;">
-            <li>Provide well-structured notes with clear topics</li>
-            <li>Include at least 100 words of content for meaningful questions</li>
-            <li>Specify the education level appropriate for your needs</li>
-            <li>Use mixed question types for comprehensive practice</li>
-          </ul>
-
-          <p><strong style="color:var(--text);margin-top:12px;display:block;">Data management:</strong></p>
-          <ul style="padding-left:20px;">
-            <li>Regularly export your progress as backup</li>
-            <li>Save important questions for exam review</li>
-            <li>Clear old quiz results to keep history manageable</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-  </div>
-  <!-- End TAB 5: HOW TO USE -->
 
 </div>
 <!-- End container -->
