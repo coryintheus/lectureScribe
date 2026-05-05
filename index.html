@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LectureScribe — AI Notes</title>
+  <!-- PDF.js for PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Mammoth.js for DOCX text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
@@ -694,7 +698,7 @@
         </div>
         <div class="input-row" style="flex-wrap:wrap;gap:10px;">
           <input type="file" id="quizFileInput" accept=".pdf,.txt,.docx,.md,.rtf" style="flex:1;min-width:200px;"/>
-          <button class="btn" id="loadFileBtn">Load File</button>
+          <button class="btn" id="loadFileBtn">📄 Extract Text</button>
         </div>
         <div style="margin-top:12px;">
           <label class="preset-label" style="margin-bottom:6px;display:block;">Or paste your notes:</label>

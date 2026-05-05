@@ -978,7 +978,7 @@ const importDataBtn = document.getElementById('importDataBtn');
 const clearAllDataBtn = document.getElementById('clearAllDataBtn');
 const dataSummary = document.getElementById('dataSummary');
 
-// Load file content with better error handling
+// Load file content with reliable text extraction for PDF, DOCX, TXT, MD
 loadFileBtn.addEventListener('click', async () => {
   const file = quizFileInput.files[0];
   if (!file) {
@@ -987,16 +987,34 @@ loadFileBtn.addEventListener('click', async () => {
     return;
   }
   
-  // Check file size (limit to 1MB for reasonable processing)
-  const maxSize = 1 * 1024 * 1024; // 1MB
+  // Check file size (limit to 5MB for reasonable processing)
+  const maxSize = 5 * 1024 * 1024; // 5MB
   if (file.size > maxSize) {
-    log('warn', 'File too large. Please use a file under 1MB or paste text directly.');
-    alert('File is too large. Please use a file under 1MB, or copy and paste the text content directly into the notes box.');
+    log('warn', 'File too large. Please use a file under 5MB or paste text directly.');
+    alert('File is too large. Please use a file under 5MB, or copy and paste the text content directly into the notes box.');
     return;
   }
   
   try {
-    const text = await file.text();
+    let text = '';
+    const extension = file.name.split('.').pop().toLowerCase();
+    
+    log('info', 'Extracting text from ' + file.name + ' (' + extension + ')...');
+    
+    // Use appropriate extraction method based on file type
+    if (extension === 'pdf') {
+      // PDF extraction using PDF.js
+      text = await extractTextFromPDF(file);
+    } else if (extension === 'docx') {
+      // DOCX extraction using Mammoth.js
+      text = await extractTextFromDOCX(file);
+    } else if (extension === 'txt' || extension === 'md' || extension === 'rtf') {
+      // Plain text files - read directly
+      text = await file.text();
+    } else {
+      // Try reading as plain text as fallback
+      text = await file.text();
+    }
     
     // Validate that the file has actual text content
     if (!text || text.trim().length < 50) {
@@ -1017,9 +1035,62 @@ loadFileBtn.addEventListener('click', async () => {
     }
   } catch (e) {
     log('err', 'Failed to read file: ' + e.message);
-    alert('Failed to read the file. Please make sure it\'s a valid text file (PDF, TXT, DOCX, MD) and try again.');
+    console.error('File extraction error:', e);
+    alert('Failed to read the file: ' + e.message + '\n\nSupported formats: PDF, TXT, DOCX, MD, RTF');
   }
 });
+
+// Extract text from PDF using PDF.js
+async function extractTextFromPDF(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        const typedarray = new Uint8Array(e.target.result);
+        
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        let fullText = '';
+        
+        log('info', 'PDF loaded: ' + pdf.numPages + ' page(s). Extracting text...');
+        
+        // Extract text from each page
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += '\n\n--- Page ' + i + ' ---\n\n' + pageText;
+        }
+        
+        resolve(fullText.trim());
+      } catch (err) {
+        reject(new Error('PDF extraction failed: ' + err.message));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read PDF file'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Extract text from DOCX using Mammoth.js
+async function extractTextFromDOCX(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        const arrayBuffer = e.target.result;
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        resolve(result.value.trim());
+      } catch (err) {
+        reject(new Error('DOCX extraction failed: ' + err.message));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read DOCX file'));
+    reader.readAsArrayBuffer(file);
+  });
+}
 
 // Generate Quiz
 generateQuizBtn.addEventListener('click', async () => {
