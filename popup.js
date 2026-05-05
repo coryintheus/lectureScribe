@@ -275,74 +275,141 @@ async function getBlobFromOffscreen() {
 }
 
 // ─── Upload File Handler (Audio, Video, or Documents) ─────────
+// New reliable method using pdf.js and mammoth.js for proper text extraction
 uploadBtn.addEventListener('click', () => uploadInput.click());
 uploadInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  
+
   // Check file type
   const isAudio    = file.type.startsWith('audio/');
   const isVideo    = file.type.startsWith('video/');
-  const isDocument = /\.(pdf|doc|docx|txt)$/i.test(file.name);
-  
-  if (!isAudio && !isVideo && !isDocument) {
+  const isPDF      = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const isDOCX     = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx');
+  const isDOC      = file.type === 'application/msword' || file.name.toLowerCase().endsWith('.doc');
+  const isTXT      = file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt');
+
+  if (!isAudio && !isVideo && !isPDF && !isDOCX && !isDOC && !isTXT) {
     log('err','Unsupported file type: ' + file.type);
     return;
   }
-  
-  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+
+  const sizeMB = (file.size / 1024 / 1024).toFixed(2);
   log('info','File loaded: ' + file.name + ' (' + sizeMB + ' MB)');
-  
-  if (isDocument) {
-    // Extract text from document using FileReader
-    setProgress(30, 'Extracting text from document...');
+
+  // No file size limit for documents - process them all
+  if (isPDF || isDOCX || isDOC || isTXT) {
+    setProgress(10, 'Extracting text from document...');
     try {
       let text = '';
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+
+      if (isTXT) {
+        // Plain text file - read directly
         text = await file.text();
-      } else if (file.type === 'application/pdf') {
-        // For PDFs, try to extract as text (works for text-based PDFs)
+        log('ok', 'Text file read successfully');
+
+      } else if (isPDF) {
+        // Use pdf.js for reliable PDF text extraction
+        log('info', 'Using PDF.js for text extraction...');
         const arrayBuffer = await file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        // Simple text extraction - look for readable strings in the binary
-        let raw = '';
-        for (let i = 0; i < uint8Array.length && raw.length < 500000; i++) {
-          const char = uint8Array[i];
-          if (char >= 32 && char <= 126) raw += String.fromCharCode(char);
+
+        // Load pdf.js worker dynamically if not already loaded
+        if (typeof pdfjsLib === 'undefined') {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load PDF.js'));
+            document.head.appendChild(script);
+          });
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         }
-        // Clean up the extracted text
-        text = raw.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-        if (!text || text.length < 50) {
-          log('warn', 'Could not extract text from this PDF. It may be image-based. Try converting to text first.');
+
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const numPages = pdf.numPages;
+        log('info', 'PDF has ' + numPages + ' page(s), extracting text...');
+
+        const textPromises = [];
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+          textPromises.push((async () => {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            return textContent.items.map(item => item.str).join(' ');
+          })());
+        }
+
+        const pageTexts = await Promise.all(textPromises);
+        text = pageTexts.join('\n\n');
+
+        if (!text || text.trim().length < 50) {
+          log('warn', 'Could not extract meaningful text from this PDF. It may be image-based (scanned). Try OCR or convert to text first.');
           setProgress(0, 'Extraction failed');
           return;
         }
-      } else if (/\.(doc|docx)$/.test(file.name)) {
-        // For Word docs, try basic text extraction
+        log('ok', 'Successfully extracted text from ' + numPages + ' PDF page(s)');
+
+      } else if (isDOCX) {
+        // Use mammoth.js for reliable DOCX extraction
+        log('info', 'Using Mammoth.js for DOCX extraction...');
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Load mammoth.js dynamically if not already loaded
+        if (typeof mammoth === 'undefined') {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load Mammoth.js'));
+            document.head.appendChild(script);
+          });
+        }
+
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        text = result.value;
+
+        if (!text || text.trim().length < 50) {
+          log('warn', 'Could not extract meaningful text from this Word document.');
+          setProgress(0, 'Extraction failed');
+          return;
+        }
+        log('ok', 'Successfully extracted text from Word document');
+
+      } else if (isDOC) {
+        // Old .doc format - try basic extraction with warning
+        log('warn', 'Old .doc format detected. Extraction may be limited.');
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         let raw = '';
-        for (let i = 0; i < uint8Array.length && raw.length < 500000; i++) {
+        for (let i = 0; i < uint8Array.length && raw.length < 1000000; i++) {
           const char = uint8Array[i];
           if (char >= 32 && char <= 126) raw += String.fromCharCode(char);
         }
         text = raw.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         if (!text || text.length < 50) {
-          log('warn', 'Could not extract text from this Word document.');
+          log('warn', 'Could not extract text from this .doc file. Try saving as .docx first.');
           setProgress(0, 'Extraction failed');
           return;
         }
       }
-      
-      setProgress(100, 'Text extracted');
+
+      setProgress(100, 'Text extracted successfully');
       setStatus('active', 'Text Ready');
       uploadedBlob = new Blob([text], { type: 'text/plain' });
       uploadedBlob._isText = true;
       uploadedBlob._text = text;
-      transcribeBtn.disabled = false;
-      log('ok', 'Text extracted (' + text.split(/\s+/).length + ' words). Click Transcribe.');
+      uploadedBlob._fileName = file.name;
+
+      // Automatically transcribe (process) the text - no extra click needed!
+      log('ok', 'Text extracted (' + wordCount(text) + ' words). Starting transcription automatically...');
+
+      // Trigger automatic processing
+      setTimeout(() => {
+        transcribeBtn.click();
+      }, 500);
+
     } catch (err) {
       log('err', 'Text extraction failed: ' + err.message);
+      console.error(err);
       setProgress(0, 'Extraction failed');
     }
   } else {
@@ -351,17 +418,18 @@ uploadInput.addEventListener('change', async (e) => {
     setStatus('active', 'File Loaded');
     uploadedBlob = file;
     transcribeBtn.disabled = false;
-    log('ok', 'File ready. Click Transcribe.');
+    log('ok', 'File ready (' + sizeMB + ' MB). Click Transcribe.');
   }
-  
+
   uploadInput.value = '';
 });
-
 // ─── Split blob into chunks (by time, not bytes) ──────────────
 // Whisper needs valid audio containers, so we can't just slice bytes.
 // Instead, we keep the full blob but send overlapping segments.
 // For files > 25MB, we use a smaller chunk size and re-containerize.
 function splitBlob(blob, maxBytes = 25 * 1024 * 1024) {
+  // Skip chunking for text blobs (from document extraction)
+  if (blob._isText) return [blob];
   if (blob.size <= maxBytes) return [blob];
   
   // For very large files, we need to split by duration using Web Audio API

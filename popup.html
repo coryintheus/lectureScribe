@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LectureScribe</title>
+  <!-- PDF.js for PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Mammoth.js for DOCX text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
@@ -514,9 +518,9 @@
         </button>
         <button class="ctrl-btn" id="uploadBtn" style="grid-column:span 2;">
           <span class="icon">📂</span>
-          <span class="label">Upload Audio / Physical Lecture</span>
+          <span class="label">Upload Notes (PDF/DOCX/TXT/Audio)</span>
         </button>
-        <input type="file" id="uploadInput" accept="audio/*,video/*,.pdf,.doc,.docx,.txt" style="display:none;">
+        <input type="file" id="uploadInput" accept="audio/*,video/*,.pdf,.doc,.docx,.txt" style="display:none;" multiple>
       </div>
 
       <div class="progress-wrap" style="margin-top:12px;" id="progressWrap">
