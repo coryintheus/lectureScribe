@@ -16,7 +16,6 @@ const keySaved      = document.getElementById('keySaved');
 const modelSelect   = document.getElementById('modelSelect');
 const notesStyle    = document.getElementById('notesStyle');
 const subjectInput  = document.getElementById('subjectInput');
-const practiceCheck = document.getElementById('practiceQuestionsCheck');
 const startBtn      = document.getElementById('startBtn');
 const stopBtn       = document.getElementById('stopBtn');
 const transcribeBtn = document.getElementById('transcribeBtn');
@@ -35,6 +34,31 @@ const statusText    = document.getElementById('statusText');
 const modelTag      = document.getElementById('modelTag');
 const chunkTag      = document.getElementById('chunkTag');
 
+// Practice Questions DOM refs
+const pqNumQuestions = document.getElementById('pqNumQuestions');
+const pqQuestionType = document.getElementById('pqQuestionType');
+const pqDifficulty = document.getElementById('pqDifficulty');
+const pqShortAnswerType = document.getElementById('pqShortAnswerType');
+const pqEducationLevel = document.getElementById('pqEducationLevel');
+const fileUploadArea = document.getElementById('fileUploadArea');
+const pqFileInput = document.getElementById('pqFileInput');
+const generatePQBtn = document.getElementById('generatePQBtn');
+const clearPQBtn = document.getElementById('clearPQBtn');
+const questionsContainer = document.getElementById('questionsContainer');
+const pqActions = document.getElementById('pqActions');
+const submitPQBtn = document.getElementById('submitPQBtn');
+const regeneratePQBtn = document.getElementById('regeneratePQBtn');
+const savedQuestionsSection = document.getElementById('savedQuestionsSection');
+const savedQuestionsList = document.getElementById('savedQuestionsList');
+
+// Progress tab DOM refs
+const progressString = document.getElementById('progressString');
+const copyProgressBtn = document.getElementById('copyProgressBtn');
+const refreshProgressBtn = document.getElementById('refreshProgressBtn');
+const restoreStringInput = document.getElementById('restoreStringInput');
+const restoreProgressBtn = document.getElementById('restoreProgressBtn');
+const clearProgressBtn = document.getElementById('clearProgressBtn');
+
 // ─── Init ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Load settings from localStorage
@@ -44,13 +68,73 @@ document.addEventListener('DOMContentLoaded', () => {
   if (local.model)          modelSelect.value = local.model;
   if (local.notesStylePref) notesStyle.value  = local.notesStylePref;
   if (local.subject)        subjectInput.value = local.subject;
-  if (local.practiceQuestions) practiceCheck.checked = local.practiceQuestions;
   if (local.transcript)     { transcriptFull = local.transcript; transcribeBtn.disabled = false; notesBtn.disabled = false; }
   if (local.notes)          { renderNotes(local.notes); modelTag.textContent = local.model || 'whisper-large-v3'; }
   
   if (local.transcript) log('ok', 'Transcript loaded (' + wordCount(local.transcript) + ' words).');
   else log('info', 'LectureScribe ready. Save your Groq API key to begin.');
+
+  // Initialize tabs
+  initTabs();
+  
+  // Initialize practice questions state
+  initPracticeQuestions();
 });
+
+// ─── Tab Management ────────────────────────────────────────────
+function initTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      
+      // Remove active class from all tabs and contents
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      // Add active class to selected tab
+      btn.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+    });
+  });
+}
+
+// ─── Practice Questions State ──────────────────────────────────
+let pqState = {
+  questions: [],
+  answers: {},
+  saved: [],
+  submitted: false,
+  uploadedNotes: ''
+};
+
+function initPracticeQuestions() {
+  // Load saved state from localStorage
+  const saved = localStorage.getItem('pqState');
+  if (saved) {
+    try {
+      pqState = JSON.parse(saved);
+      if (pqState.questions.length > 0) {
+        renderQuestions();
+        pqActions.style.display = 'block';
+        if (pqState.saved.length > 0) {
+          savedQuestionsSection.style.display = 'block';
+          renderSavedQuestions();
+        }
+      }
+    } catch(e) { console.error('Failed to load PQ state:', e); }
+  }
+  updateProgressString();
+}
+
+function savePQState() {
+  localStorage.setItem('pqState', JSON.stringify(pqState));
+  updateProgressString();
+}
+
+function updateProgressString() {
+  const str = btoa(JSON.stringify(pqState));
+  progressString.textContent = str;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────
 function log(type, msg) {
@@ -81,7 +165,6 @@ function saveSettings() {
     model: modelSelect.value,
     notesStylePref: notesStyle.value,
     subject: subjectInput.value,
-    practiceQuestions: practiceCheck.checked,
     transcript: transcriptFull,
     notes: notesOutput.classList.contains('rendered') ? notesOutput.innerText : null
   };
@@ -164,7 +247,6 @@ saveKeyBtn.addEventListener('click', () => {
 modelSelect.addEventListener('change', saveSettings);
 notesStyle.addEventListener('change', saveSettings);
 subjectInput.addEventListener('input', saveSettings);
-practiceCheck.addEventListener('change', saveSettings);
 
 // ─── Start Recording (Web Audio Capture) ──────────────────────
 startBtn.addEventListener('click', async () => {
@@ -460,12 +542,11 @@ notesBtn.addEventListener('click', async () => {
 
   const style   = notesStyle.value || 'exam';
   const subject = subjectInput.value?.trim() || '';
-  const includePractice = practiceCheck.checked;
 
   notesBtn.disabled = true;
   setStatus('active','Generating notes…');
   setProgress(10,'Preparing…');
-  log('info','Generating ' + style + ' notes' + (includePractice ? ' with practice questions' : '') + '…');
+  log('info','Generating ' + style + ' notes…');
 
   const subjectCtx = subject
     ? 'The subject/course is: "' + subject + '". Use this context ONLY to correctly interpret technical terms and fix transcription errors. Do NOT add external knowledge beyond what the lecture covers.'
@@ -539,7 +620,6 @@ RULES:
 - Flag common misconceptions.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
 Generate TWO types of questions:
 **A. Comprehension Check (5-7 questions)**
 - Short, direct questions testing basic understanding
@@ -572,7 +652,6 @@ Mnemonics, memory hooks, intuitive shortcuts for the hardest ideas.`,
       cornell: `You are an expert tutor generating CORNELL NOTES. Not a summary — pedagogical notes for retention.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions (15-20 questions)
 **A. Quick Recall (8-10 questions)** - Direct fact/concept checks
 **B. Application Problems (7-10 questions)** - Scenario-based, multi-step reasoning
 Include varied question types with full answers.` : ''}
@@ -594,7 +673,6 @@ All formulas in LaTeX with variable definitions. When to use each.
       outline: `You are an expert tutor. Create a COMPREHENSIVE STUDY OUTLINE enriched with your expertise.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
 **Comprehension:** 5-7 direct questions checking understanding
 **Exam-Style:** 5-8 application/problems with full solutions` : ''}
 
@@ -611,7 +689,6 @@ Be concise — revision notes, not prose.`,
       flashcards: `You are an expert tutor. Generate 25–35 EXAM-QUALITY flashcards testing deep understanding.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Additional Practice Questions
 After the flashcards, add:
 - 5-7 comprehension check questions (quick recall)
 - 5-8 exam-style problems with detailed solutions` : ''}
@@ -624,7 +701,6 @@ Include: definition cards, mechanism cards, comparison cards ("difference betwee
       summary: `You are an expert tutor. Create a DEEP STUDY SUMMARY that goes beyond the lecture.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions (10-12 questions)
 **Comprehension:** 5-6 quick-check questions
 **Application:** 5-6 exam-style problems with answers` : ''}
 
@@ -646,7 +722,6 @@ Misconceptions, exam traps, edge cases.`,
       concept: `You are an expert tutor creating a CONCEPT MAP for revision.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions
 **Check Understanding:** 5-7 questions verifying concept relationships
 **Apply Knowledge:** 5-7 scenario problems testing connections between concepts` : ''}
 
@@ -666,7 +741,6 @@ Where students mix up related concepts. Clarify distinctions.`,
       problem: `You are an expert tutor focusing on PROBLEM-SOLVING SKILLS.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Problems (12-15 problems)
 **Guided Practice (5-7):** Step-by-step worked examples
 **Independent (7-8):** Full problems with answers only — test yourself` : ''}
 
@@ -687,7 +761,6 @@ Condensed table of problem types → approaches → key formulas.`,
       compare: `You are an expert tutor creating COMPARE & CONTRAST notes.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions
 **Distinguish:** 5-7 "What's the difference between X and Y?" questions
 **Apply:** 5-7 scenarios requiring choice between similar concepts/methods` : ''}
 
@@ -707,7 +780,6 @@ The 3-5 critical differences that matter for exams.`,
       timeline: `You are an expert tutor creating a TIMELINE/SEQUENCE overview.
 ${subjectCtx}
 ${FORMATTING}
-${includePractice ? `\n### 📝 Practice Questions
 **Sequence Check:** 5-7 "What comes next?" or ordering questions
 **Causal Links:** 5-7 questions about why each step leads to the next` : ''}
 
@@ -789,4 +861,537 @@ clearBtn.addEventListener('click', () => {
   chunkTag.textContent = '';
   log('info','Cleared.');
   saveSettings();
+});
+
+// ─── Practice Questions: File Upload ───────────────────────────
+fileUploadArea.addEventListener('click', () => pqFileInput.click());
+
+fileUploadArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  fileUploadArea.classList.add('dragover');
+});
+
+fileUploadArea.addEventListener('dragleave', () => {
+  fileUploadArea.classList.remove('dragover');
+});
+
+fileUploadArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  fileUploadArea.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handlePQFile(file);
+});
+
+pqFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) handlePQFile(file);
+  pqFileInput.value = '';
+});
+
+async function handlePQFile(file) {
+  const validTypes = ['.txt', '.pdf', '.docx', '.md', '.html', '.htm'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  
+  if (!validTypes.includes(ext)) {
+    log('err', 'Unsupported file type: ' + ext);
+    return;
+  }
+  
+  try {
+    let text = '';
+    
+    if (ext === '.txt' || ext === '.md' || ext === '.html' || ext === '.htm') {
+      text = await file.text();
+    } else if (ext === '.pdf') {
+      // Simple PDF text extraction (basic)
+      text = await extractTextFromPDF(file);
+    } else if (ext === '.docx') {
+      text = await extractTextFromDOCX(file);
+    }
+    
+    pqState.uploadedNotes = text;
+    generatePQBtn.disabled = false;
+    fileUploadArea.querySelector('.file-upload-text').textContent = '✓ ' + file.name;
+    log('ok', 'Notes file loaded: ' + file.name + ' (' + text.length + ' chars)');
+  } catch(e) {
+    log('err', 'Failed to read file: ' + e.message);
+  }
+}
+
+async function extractTextFromPDF(file) {
+  // Basic PDF text extraction - in production use pdf.js
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // Simple fallback - just return binary as string for now
+      // In production, integrate pdf.js library
+      resolve('PDF content loaded. For best results, convert PDF to text first.');
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function extractTextFromDOCX(file) {
+  // Basic DOCX text extraction
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const zip = new JSZip();
+        const docx = await zip.loadAsync(e.target.result);
+        const content = await docx.file('word/document.xml').async('text');
+        // Strip XML tags
+        const text = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        resolve(text);
+      } catch(err) {
+        resolve('DOCX content loaded. For best results, convert to plain text first.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ─── Practice Questions: Generate ──────────────────────────────
+generatePQBtn.addEventListener('click', async () => {
+  const groqApiKey = localStorage.getItem('ls_groqApiKey');
+  if (!groqApiKey) { 
+    log('err', 'Set your Groq API key first!'); 
+    alert('Please save your Groq API key in the AI Notes tab first.');
+    return; 
+  }
+  
+  if (!pqState.uploadedNotes) {
+    log('err', 'No notes uploaded.');
+    return;
+  }
+  
+  generatePQBtn.disabled = true;
+  generatePQBtn.textContent = '⏳ Generating...';
+  
+  const numQuestions = parseInt(pqNumQuestions.value) || 10;
+  const questionType = pqQuestionType.value;
+  const difficulty = pqDifficulty.value;
+  const shortAnswerType = pqShortAnswerType.value;
+  const educationLevel = pqEducationLevel.value.trim() || 'University';
+  
+  try {
+    const prompt = buildGeneratePrompt(numQuestions, questionType, difficulty, shortAnswerType, educationLevel);
+    
+    const res = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqApiKey },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an expert educator generating practice questions from study notes.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 6000,
+        temperature: 0.5
+      })
+    });
+    
+    if (!res.ok) throw new Error('Generation failed: ' + res.status);
+    
+    const result = await res.json();
+    const generatedContent = result.choices?.[0]?.message?.content || '';
+    
+    // Parse the generated questions
+    pqState.questions = parseGeneratedQuestions(generatedContent, shortAnswerType);
+    pqState.answers = {};
+    pqState.submitted = false;
+    
+    renderQuestions();
+    pqActions.style.display = 'block';
+    savePQState();
+    
+    generatePQBtn.textContent = '❓ Generate Questions';
+    generatePQBtn.disabled = false;
+    log('ok', 'Generated ' + pqState.questions.length + ' practice questions.');
+    
+  } catch(e) {
+    log('err', 'Failed to generate questions: ' + e.message);
+    generatePQBtn.textContent = '❓ Generate Questions';
+    generatePQBtn.disabled = false;
+  }
+});
+
+function buildGeneratePrompt(numQuestions, questionType, difficulty, shortAnswerType, educationLevel) {
+  let typeDesc = '';
+  if (questionType === 'mixed') {
+    typeDesc = 'Generate a mix of multiple choice, short answer, and calculation questions.';
+  } else if (questionType === 'mcq') {
+    typeDesc = 'Generate ONLY multiple choice questions with 4 options each.';
+  } else if (questionType === 'shortanswer') {
+    typeDesc = 'Generate ONLY short answer questions.';
+  } else if (questionType === 'calculation') {
+    typeDesc = 'Generate ONLY calculation-based problems with numerical answers.';
+  }
+  
+  let diffDesc = '';
+  if (difficulty === '1') diffDesc = 'Level 1: Basic recall and understanding questions.';
+  else if (difficulty === '2') diffDesc = 'Level 2: Application and analysis questions.';
+  else if (difficulty === '3') diffDesc = 'Level 3: Challenging synthesis and evaluation questions.';
+  else diffDesc = 'Mix of all difficulty levels.';
+  
+  return `Generate ${numQuestions} practice questions based on these study notes.
+
+TARGET AUDIENCE: ${educationLevel} level students
+DIFFICULTY: ${diffDesc}
+QUESTION TYPES: ${typeDesc}
+
+IMPORTANT FORMAT REQUIREMENTS:
+Return the questions in this EXACT JSON format (no markdown, no extra text):
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "mcq" | "shortanswer" | "calculation",
+      "difficulty": 1 | 2 | 3,
+      "question": "The question text here",
+      "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],  // only for mcq
+      "correctAnswer": "B" | "exact answer text" | "numerical value",
+      "explanation": "Why this is the correct answer"
+    }
+  ]
+}
+
+STUDY NOTES:
+${pqState.uploadedNotes.slice(0, 15000)}`;
+}
+
+function parseGeneratedQuestions(content, shortAnswerType) {
+  try {
+    // Try to find JSON in the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.questions && Array.isArray(parsed.questions)) {
+        return parsed.questions.map(q => ({
+          ...q,
+          userAnswer: null,
+          handwrittenData: null,
+          inputType: q.type === 'shortanswer' ? shortAnswerType : 'text'
+        }));
+      }
+    }
+  } catch(e) { console.error('Parse error:', e); }
+  
+  // Fallback: create a single question from the content
+  return [{
+    id: 1,
+    type: 'shortanswer',
+    difficulty: 2,
+    question: 'Based on the notes: ' + content.slice(0, 500),
+    correctAnswer: 'See generated content',
+    explanation: 'Review the generated content above.',
+    userAnswer: null,
+    handwrittenData: null,
+    inputType: shortAnswerType
+  }];
+}
+
+function renderQuestions() {
+  if (!pqState.questions.length) {
+    questionsContainer.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:40px;">No questions generated yet. Upload notes and click Generate.</p>';
+    return;
+  }
+  
+  let html = '';
+  pqState.questions.forEach((q, idx) => {
+    html += `
+      <div class="question-item" data-qid="${q.id}">
+        <div class="question-header">
+          <span class="question-type">${q.type.toUpperCase()} • Difficulty ${q.difficulty}</span>
+          <button class="btn secondary" onclick="saveQuestion(${q.id})" style="padding:4px 8px;font-size:9px;">⭐ Save</button>
+        </div>
+        <div class="question-text"><strong>Q${idx+1}:</strong> ${q.question}</div>
+        ${renderQuestionInput(q, idx)}
+        <div class="question-actions">
+          ${q.explanation ? `<button class="btn secondary" onclick="toggleExplanation(${q.id})" style="padding:4px 8px;font-size:9px;">👁 Show Answer</button>` : ''}
+        </div>
+        <div class="explanation" id="expl-${q.id}" style="display:none;margin-top:10px;padding:10px;background:rgba(52,211,153,0.1);border:1px solid var(--green);border-radius:6px;">
+          <strong style="color:var(--green);">✓ Correct Answer:</strong> ${q.correctAnswer}<br><br>
+          <em>${q.explanation || ''}</em>
+        </div>
+      </div>
+    `;
+  });
+  
+  questionsContainer.innerHTML = html;
+  
+  // Initialize canvases for handwritten questions
+  if (pqState.questions.some(q => q.inputType === 'handwritten')) {
+    initHandwrittenCanvases();
+  }
+}
+
+function renderQuestionInput(q, idx) {
+  if (q.type === 'mcq') {
+    let optionsHtml = '<div class="mcq-options">';
+    const labels = ['A', 'B', 'C', 'D'];
+    (q.options || []).forEach((opt, i) => {
+      optionsHtml += `
+        <label class="mcq-option" data-opt="${labels[i]}">
+          <input type="radio" name="q_${q.id}" value="${labels[i]}" onchange="recordAnswer(${q.id}, '${labels[i]}')">
+          ${opt}
+        </label>
+      `;
+    });
+    optionsHtml += '</div>';
+    return optionsHtml;
+  } else if (q.type === 'shortanswer' || q.type === 'calculation') {
+    if (q.inputType === 'text') {
+      return `<textarea class="short-answer-input" placeholder="Type your answer here..." oninput="recordAnswer(${q.id}, this.value)"></textarea>`;
+    } else {
+      return `
+        <div class="canvas-tools">
+          <button class="canvas-tool" onclick="setCanvasColor(${q.id}, '#ffffff')">⬜ White</button>
+          <button class="canvas-tool" onclick="setCanvasColor(${q.id}, '#1a1a26')">⬛ Dark</button>
+          <button class="canvas-tool" onclick="clearCanvas(${q.id})">✕ Clear</button>
+        </div>
+        <canvas class="handwritten-canvas" id="canvas-${q.id}"></canvas>
+      `;
+    }
+  }
+  return '';
+}
+
+function initHandwrittenCanvases() {
+  pqState.questions.forEach(q => {
+    if (q.inputType === 'handwritten') {
+      const canvas = document.getElementById('canvas-' + q.id);
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      ctx.strokeStyle = '#e8e8f0';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      
+      let drawing = false;
+      let lastX = 0, lastY = 0;
+      
+      canvas.addEventListener('mousedown', (e) => {
+        drawing = true;
+        const rect = canvas.getBoundingClientRect();
+        lastX = e.clientX - rect.left;
+        lastY = e.clientY - rect.top;
+      });
+      
+      canvas.addEventListener('mousemove', (e) => {
+        if (!drawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        
+        lastX = x;
+        lastY = y;
+        
+        // Save canvas data
+        pqState.answers[q.id] = canvas.toDataURL();
+      });
+      
+      canvas.addEventListener('mouseup', () => drawing = false);
+      canvas.addEventListener('mouseout', () => drawing = false);
+    }
+  });
+}
+
+function recordAnswer(qid, answer) {
+  pqState.answers[qid] = answer;
+  savePQState();
+}
+
+function setCanvasColor(qid, color) {
+  const canvas = document.getElementById('canvas-' + qid);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = color === '#ffffff' ? '#1a1a26' : '#e8e8f0';
+}
+
+function clearCanvas(qid) {
+  const canvas = document.getElementById('canvas-' + qid);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1a1a26';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  pqState.answers[qid] = null;
+  savePQState();
+}
+
+function toggleExplanation(qid) {
+  const el = document.getElementById('expl-' + qid);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveQuestion(qid) {
+  const q = pqState.questions.find(q => q.id === qid);
+  if (!q) return;
+  
+  if (!pqState.saved.find(s => s.id === qid)) {
+    pqState.saved.push({ ...q, savedAt: Date.now() });
+    savedQuestionsSection.style.display = 'block';
+    renderSavedQuestions();
+    savePQState();
+    log('ok', 'Question saved.');
+  } else {
+    log('warn', 'Question already saved.');
+  }
+}
+
+function renderSavedQuestions() {
+  if (!pqState.saved.length) {
+    savedQuestionsList.innerHTML = '<p style="color:var(--text-dim);font-size:11px;">No saved questions yet.</p>';
+    return;
+  }
+  
+  let html = '';
+  pqState.saved.forEach((q, idx) => {
+    html += `
+      <div class="saved-question-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="color:var(--accent);font-size:9px;text-transform:uppercase;">${q.type} • D${q.difficulty}</span>
+          <button class="btn danger" onclick="removeSavedQuestion(${q.id})" style="padding:2px 6px;font-size:8px;">✕</button>
+        </div>
+        <div style="color:var(--text);font-size:11px;line-height:1.5;">${q.question}</div>
+      </div>
+    `;
+  });
+  savedQuestionsList.innerHTML = html;
+}
+
+function removeSavedQuestion(qid) {
+  pqState.saved = pqState.saved.filter(s => s.id !== qid);
+  if (!pqState.saved.length) savedQuestionsSection.style.display = 'none';
+  renderSavedQuestions();
+  savePQState();
+}
+
+// ─── Submit Answers ────────────────────────────────────────────
+submitPQBtn.addEventListener('click', () => {
+  let score = 0;
+  let total = 0;
+  
+  pqState.questions.forEach(q => {
+    if (q.type === 'mcq') {
+      total++;
+      const userAnswer = pqState.answers[q.id];
+      const optionEl = document.querySelector(`input[name="q_${q.id}"][value="${userAnswer}"]`);
+      const parentLabel = optionEl?.closest('.mcq-option');
+      
+      if (userAnswer === q.correctAnswer) {
+        score++;
+        if (parentLabel) {
+          parentLabel.classList.add('correct');
+          parentLabel.classList.remove('incorrect');
+        }
+      } else {
+        if (parentLabel) {
+          parentLabel.classList.add('incorrect');
+          parentLabel.classList.remove('correct');
+        }
+        // Highlight correct answer
+        const correctEl = document.querySelector(`input[name="q_${q.id}"][value="${q.correctAnswer}"]`);
+        correctEl?.closest('.mcq-option')?.classList.add('correct');
+      }
+    } else {
+      // For short answer/calculation, just show the explanation
+      total++;
+    }
+  });
+  
+  pqState.submitted = true;
+  savePQState();
+  
+  // Show all explanations
+  pqState.questions.forEach(q => {
+    const expl = document.getElementById('expl-' + q.id);
+    if (expl) expl.style.display = 'block';
+  });
+  
+  alert(`Score: ${score}/${total} (${Math.round(score/total*100)}%)\n\nCheck individual questions for correct answers and explanations.`);
+});
+
+regeneratePQBtn.addEventListener('click', () => {
+  if (confirm('Regenerate questions? This will clear current progress.')) {
+    pqState.questions = [];
+    pqState.answers = {};
+    pqState.submitted = false;
+    questionsContainer.innerHTML = '';
+    pqActions.style.display = 'none';
+    generatePQBtn.disabled = false;
+    savePQState();
+  }
+});
+
+clearPQBtn.addEventListener('click', () => {
+  if (confirm('Clear all practice questions and saved items?')) {
+    pqState = { questions: [], answers: {}, saved: [], submitted: false, uploadedNotes: '' };
+    questionsContainer.innerHTML = '';
+    pqActions.style.display = 'none';
+    savedQuestionsSection.style.display = 'none';
+    fileUploadArea.querySelector('.file-upload-text').textContent = 'Click or drag notes file here';
+    generatePQBtn.disabled = true;
+    savePQState();
+  }
+});
+
+// ─── Progress Tab Functions ────────────────────────────────────
+copyProgressBtn.addEventListener('click', () => {
+  const str = progressString.textContent;
+  navigator.clipboard.writeText(str).then(() => {
+    copyProgressBtn.textContent = '✓ Copied!';
+    setTimeout(() => copyProgressBtn.textContent = '⎘ Copy String', 2000);
+  });
+});
+
+refreshProgressBtn.addEventListener('click', updateProgressString);
+
+restoreProgressBtn.addEventListener('click', () => {
+  const str = restoreStringInput.value.trim();
+  if (!str) { alert('Paste a progress string first.'); return; }
+  
+  try {
+    const restored = JSON.parse(atob(str));
+    if (restored.questions) {
+      pqState = restored;
+      savePQState();
+      
+      if (pqState.questions.length > 0) {
+        renderQuestions();
+        pqActions.style.display = 'block';
+      }
+      if (pqState.saved.length > 0) {
+        savedQuestionsSection.style.display = 'block';
+        renderSavedQuestions();
+      }
+      
+      alert('Progress restored successfully!');
+    } else {
+      alert('Invalid progress string format.');
+    }
+  } catch(e) {
+    alert('Failed to restore: Invalid progress string.');
+  }
+});
+
+clearProgressBtn.addEventListener('click', () => {
+  if (confirm('Clear all progress? This cannot be undone.')) {
+    pqState = { questions: [], answers: {}, saved: [], submitted: false, uploadedNotes: '' };
+    localStorage.removeItem('pqState');
+    questionsContainer.innerHTML = '';
+    pqActions.style.display = 'none';
+    savedQuestionsSection.style.display = 'none';
+    updateProgressString();
+    alert('Progress cleared.');
+  }
 });
