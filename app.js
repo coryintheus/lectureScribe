@@ -171,7 +171,12 @@ startBtn.addEventListener('click', async () => {
   const groqApiKey = localStorage.getItem('ls_groqApiKey');
   if (!groqApiKey) { log('err','Set your Groq API key first!'); return; }
   
-  startBtn.disabled = true;
+  // Reset button state first
+  startBtn.disabled = false;
+  startBtn.classList.remove('active');
+  stopBtn.disabled = true;
+  stopBtn.classList.remove('active');
+  
   log('info','Select the tab/window to capture audio from…');
   
   try {
@@ -192,7 +197,6 @@ startBtn.addEventListener('click', async () => {
     if (!audioTrack) {
       log('err','No audio track detected. Make sure to enable "Share system audio" in the browser prompt.');
       stream.getTracks().forEach(t => t.stop());
-      startBtn.disabled = false;
       return;
     }
     
@@ -211,14 +215,12 @@ startBtn.addEventListener('click', async () => {
     if (audioTrack.readyState !== 'live') {
       log('err', 'Audio track is not live (state: ' + audioTrack.readyState + '). Try selecting the tab again and ensure audio is playing.');
       stream.getTracks().forEach(t => t.stop());
-      startBtn.disabled = false;
       return;
     }
     
     if (!audioTrack.enabled || audioTrack.muted) {
       log('err', 'Audio track is disabled or muted. Make sure the tab has audio playing and you enabled "Share system audio".');
       stream.getTracks().forEach(t => t.stop());
-      startBtn.disabled = false;
       return;
     }
     
@@ -229,7 +231,6 @@ startBtn.addEventListener('click', async () => {
     if (!audioOnlyStream.getAudioTracks().length) {
       log('err','No audio track in stream. Make sure to enable "Share system audio" in the browser prompt.');
       stream.getTracks().forEach(t => t.stop());
-      startBtn.disabled = false;
       return;
     }
     
@@ -313,6 +314,7 @@ startBtn.addEventListener('click', async () => {
     }
     
     isRecording = true;
+    startBtn.disabled = false;
     stopBtn.disabled = false;
     stopBtn.classList.add('active');
     setStatus('recording','Recording…');
