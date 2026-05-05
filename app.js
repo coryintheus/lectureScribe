@@ -363,74 +363,48 @@ function stopRecording() {
 // ─── Stop Recording ───────────────────────────────────────────
 stopBtn.addEventListener('click', stopRecording);
 
-// ─── Fetch Video from URL ─────────────────────────────────────
+// ─── Open Video URL for Capture ─────────────────────────────────────
 fetchVideoBtn.addEventListener('click', async () => {
   const url = videoUrlInput.value.trim();
-  if (!url) { log('err','Please enter a video URL.'); return; }
+  if (!url) { 
+    log('err','Please enter a video URL.'); 
+    return; 
+  }
   
   // Validate URL format
-  const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+  const urlPattern = /^https?:\/\/.+/i;
   if (!urlPattern.test(url)) {
-    log('err','Invalid URL format.'); return;
+    log('err','Invalid URL format. Please include http:// or https://');
+    return;
   }
   
-  log('info','Fetching audio from: ' + url);
-  setProgress(10,'Downloading audio...');
-  setStatus('active','Fetching...');
-  fetchVideoBtn.disabled = true;
+  log('info','Opening video in new tab: ' + url);
   
-  try {
-    // For direct video/audio file URLs, we can fetch them directly
-    // For YouTube/Panopto, we need to use a proxy service or download tool
-    
-    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-    const isPanopto = url.includes('panopto.com') || url.includes('panopto.eu');
-    
-    if (isYouTube || isPanopto) {
-      // For these platforms, we need to guide the user to download first
-      log('warn','Direct fetching not supported for ' + (isYouTube ? 'YouTube' : 'Panopto') + '. Please use one of these options:');
-      log('info','Option 1: Use a browser extension like "Video DownloadHelper" to download the audio.');
-      log('info','Option 2: Play the video in another tab and use "Start Capture" to record system audio.');
-      log('info','Option 3: Download the video using an external tool, then upload the file.');
-      
-      // Provide helpful links
-      const downloadService = 'https://ytdl-org.github.io/youtube-dl/';
-      log('info','You can use tools like youtube-dl: ' + downloadService);
-      
-      setProgress(0,'Manual download required');
-      setStatus('active','Waiting for file upload');
-      fetchVideoBtn.disabled = false;
-      return;
-    }
-    
-    // Try to fetch directly (works for direct MP4/MP3 links)
-    const response = await fetch(url, { mode: 'cors' });
-    if (!response.ok) throw new Error('Failed to fetch: ' + response.status);
-    
-    const blob = await response.blob();
-    const contentType = blob.type;
-    
-    if (!contentType.startsWith('audio/') && !contentType.startsWith('video/')) {
-      throw new Error('URL does not point to audio/video content. Content-Type: ' + contentType);
-    }
-    
-    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-    log('info','Downloaded: ' + sizeMB + ' MB (' + contentType + ')');
-    
-    uploadedBlob = blob;
-    setProgress(100,'Audio ready');
-    setStatus('active','File Loaded');
-    transcribeBtn.disabled = false;
-    log('ok','Audio ready. Click Transcribe.');
-    
-  } catch(e) {
-    log('err','Fetch failed: ' + e.message);
-    log('info','Tip: If the URL requires authentication or has CORS restrictions, try downloading the file manually and uploading it instead.');
-    setProgress(0,'Failed');
-    setStatus('active','Error');
-  } finally {
-    fetchVideoBtn.disabled = false;
+  // Open the video in a new tab
+  const newWindow = window.open(url, '_blank');
+  
+  if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+    log('warn','Popup blocker may have prevented the new tab from opening.');
+    log('info','Please manually open your video URL in a new tab, then return here and click "Start Capture".');
+  } else {
+    log('ok','Video opened in new tab!');
+    log('info','Now follow these steps:');
+    log('info','1. Wait for the video to load in the new tab');
+    log('info','2. Return to this tab and click "Start Capture"');
+    log('info','3. Select the video tab when prompted');
+    log('info','4. IMPORTANT: Check "Share system audio" in the browser prompt');
+    log('info','5. Click "Share" to begin capturing audio');
+    log('info','6. Switch back to the video tab and play the lecture');
+    log('info','7. When finished, return here and click "Stop & Process"');
   }
+  
+  // Highlight the Start Capture button to guide user
+  startBtn.style.borderColor = 'var(--green)';
+  startBtn.style.background = 'rgba(52,211,153,0.1)';
+  setTimeout(() => {
+    startBtn.style.borderColor = '';
+    startBtn.style.background = '';
+  }, 3000);
 });
 
 // ─── Upload Audio File ────────────────────────────────────────
@@ -1004,20 +978,46 @@ const importDataBtn = document.getElementById('importDataBtn');
 const clearAllDataBtn = document.getElementById('clearAllDataBtn');
 const dataSummary = document.getElementById('dataSummary');
 
-// Load file content
+// Load file content with better error handling
 loadFileBtn.addEventListener('click', async () => {
   const file = quizFileInput.files[0];
   if (!file) {
     log('warn', 'Please select a file first.');
+    alert('Please select a file to upload.');
+    return;
+  }
+  
+  // Check file size (limit to 1MB for reasonable processing)
+  const maxSize = 1 * 1024 * 1024; // 1MB
+  if (file.size > maxSize) {
+    log('warn', 'File too large. Please use a file under 1MB or paste text directly.');
+    alert('File is too large. Please use a file under 1MB, or copy and paste the text content directly into the notes box.');
     return;
   }
   
   try {
     const text = await file.text();
+    
+    // Validate that the file has actual text content
+    if (!text || text.trim().length < 50) {
+      log('warn', 'File appears to be empty or contains insufficient text.');
+      alert('The file appears to be empty or contains very little text. Please check the file or paste your notes directly.');
+      return;
+    }
+    
     quizNotesInput.value = text;
     log('ok', `Loaded ${file.name} (${text.length} characters)`);
+    
+    // Auto-detect if content looks like lecture notes
+    const hasStructure = /(^|\n)(#|##|###|\d+\.|\- |\* |Chapter|Section|Module|Lecture|Topic)/i.test(text);
+    if (hasStructure) {
+      log('info', 'Content appears to be structured notes - good for quiz generation!');
+    } else {
+      log('info', 'Tip: For best quiz results, ensure your notes have clear topics and key concepts.');
+    }
   } catch (e) {
     log('err', 'Failed to read file: ' + e.message);
+    alert('Failed to read the file. Please make sure it\'s a valid text file (PDF, TXT, DOCX, MD) and try again.');
   }
 });
 
@@ -1047,8 +1047,14 @@ generateQuizBtn.addEventListener('click', async () => {
   generateQuizBtn.textContent = '⏳ Generating...';
   
   try {
+    // Validate content quality before processing
+    const wordCount = notesContent.split(/\s+/).length;
+    if (wordCount < 100) {
+      throw new Error('Study material is too short (' + wordCount + ' words). Please provide at least 100 words of content for meaningful quiz generation.');
+    }
+    
     // Pre-process the content to extract key topics and context
-    log('info', 'Analyzing study material...');
+    log('info', 'Analyzing study material (' + wordCount + ' words)...');
     
     // First, get a summary of the content to provide better context
     const analysisPrompt = `Analyze this study material and extract:
@@ -1060,7 +1066,7 @@ generateQuizBtn.addEventListener('click', async () => {
 Return as JSON: {"subject": "...", "keyConcepts": ["...", "..."], "technicalTerms": ["...", "..."], "academicLevel": "..."}
 
 STUDY MATERIAL:
-${notesContent.slice(0, 8000)}`;
+${notesContent.slice(0, 6000)}`;
 
     const analysisResponse = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -1068,11 +1074,11 @@ ${notesContent.slice(0, 8000)}`;
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: 'You are an educational analyst. Return ONLY valid JSON, no markdown.' },
+          { role: 'system', content: 'You are an educational analyst. Return ONLY valid JSON, no markdown, no explanations outside the JSON.' },
           { role: 'user', content: analysisPrompt }
         ],
-        max_tokens: 1000,
-        temperature: 0.3
+        max_tokens: 800,
+        temperature: 0.2
       })
     });
     
@@ -1083,66 +1089,74 @@ ${notesContent.slice(0, 8000)}`;
       if (jsonMatch) {
         contextInfo = JSON.parse(jsonMatch[0]);
       }
-      log('info', 'Subject identified: ' + contextInfo.subject);
+      if (contextInfo.subject) {
+        log('info', 'Subject identified: ' + contextInfo.subject);
+      }
+      if (contextInfo.keyConcepts && contextInfo.keyConcepts.length > 0) {
+        log('info', 'Key concepts found: ' + contextInfo.keyConcepts.slice(0, 5).join(', ') + '...');
+      }
     } catch(e) {
-      log('warn', 'Could not parse context, proceeding anyway');
+      log('warn', 'Could not parse detailed context, will use material directly');
     }
     
     const prompt = `You are an expert educational content creator. Generate ${numQuestions} practice questions based STRICTLY on the following study material.
 
-IMPORTANT RULES:
-1. ALL questions MUST be directly based on content from the study material provided
-2. Do NOT invent facts, concepts, or information not present in the material
-3. If the material doesn't contain enough content for ${numQuestions} questions, generate fewer but accurate questions
-4. Use the exact terminology from the material
-5. For MCQs, make distractors plausible but clearly wrong based on the material
+CRITICAL RULES - READ CAREFULLY:
+1. EVERY question MUST be directly answerable using ONLY information from the study material below
+2. Do NOT use any external knowledge, facts, or concepts not explicitly stated in the material
+3. If the material is insufficient for ${numQuestions} quality questions, generate fewer questions (quality over quantity)
+4. Use EXACT terminology, phrases, and wording from the material
+5. For MCQs: All wrong options (distractors) must be plausible but clearly incorrect based SOLELY on the material
+6. Each question must cite or reference specific content from the material in its explanation
+7. DO NOT make up numbers, dates, names, or facts that aren't in the material
 
-CONTEXT ANALYSIS:
+CONTEXT FROM ANALYSIS:
 - Subject: ${contextInfo.subject || 'the provided material'}
-- Key Concepts: ${(contextInfo.keyConcepts || []).join(', ') || 'see material'}
-- Technical Terms: ${(contextInfo.technicalTerms || []).join(', ') || 'see material'}
+- Key Concepts to focus on: ${(contextInfo.keyConcepts || []).slice(0, 8).join(', ') || 'extract from material'}
+- Technical Terms to use: ${(contextInfo.technicalTerms || []).slice(0, 10).join(', ') || 'extract from material'}
 
-EDUCATION LEVEL: ${eduLevel}
-DIFFICULTY: ${difficulty === '1' ? 'Level 1 - Basic recall and understanding' : difficulty === '2' ? 'Level 2 - Application of concepts' : difficulty === '3' ? 'Level 3 - Analysis, synthesis, and evaluation' : 'Mixed difficulty levels'}
-QUESTION TYPE: ${questionType === 'mcq' ? 'Multiple Choice Questions only' : questionType === 'shortanswer' ? 'Short Answer questions only' : questionType === 'calculation' ? 'Calculation/Problem-solving questions only' : 'Mix of different question types'}
-INPUT METHOD FOR SHORT ANSWER: ${inputType === 'handwritten' ? 'Students will draw/write by hand on canvas' : 'Students will type text answers'}
+SETTINGS:
+- Education Level: ${eduLevel}
+- Difficulty: ${difficulty === '1' ? 'Level 1 - Basic recall and understanding' : difficulty === '2' ? 'Level 2 - Application of concepts' : difficulty === '3' ? 'Level 3 - Analysis and evaluation' : 'Mixed levels'}
+- Question Types: ${questionType === 'mcq' ? 'Multiple Choice ONLY' : questionType === 'shortanswer' ? 'Short Answer ONLY' : questionType === 'calculation' ? 'Calculation/Problem-solving ONLY' : 'Mix of types'}
+- Input Method: ${inputType === 'handwritten' ? 'Handwritten/drawn answers' : 'Typed text answers'}
 
-For each question, provide:
-- A unique ID (q1, q2, etc.)
-- Question type: "mcq", "shortanswer", or "calculation"
-- Difficulty level: 1, 2, or 3
-- The question text (must reference specific content from the material)
-- For MCQ: 4 options (A, B, C, D) with the correct answer letter
-- For shortanswer/calculation: the expected correct answer (must be from the material)
-- A brief explanation citing where in the material this comes from
+REQUIRED FORMAT FOR EACH QUESTION:
+- id: unique identifier like "q1", "q2", etc.
+- type: "mcq", "shortanswer", or "calculation"
+- difficulty: 1, 2, or 3
+- question: clear question text that references specific material content
+- For MCQ: options object with A, B, C, D keys AND correctAnswer letter
+- For shortanswer/calculation: correctAnswer with the expected response from the material
+- explanation: MUST include a quote or specific reference to where this comes from in the material
 
-Return ONLY valid JSON in this exact format:
+OUTPUT FORMAT - Return ONLY valid JSON, no markdown, no extra text:
 {
   "questions": [
     {
       "id": "q1",
       "type": "mcq",
       "difficulty": 2,
-      "question": "What is...",
+      "question": "Based on the material, what is...",
       "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
       "correctAnswer": "B",
-      "explanation": "..."
+      "explanation": "The material states: '[quote from material]'"
     },
     {
       "id": "q2",
       "type": "shortanswer",
       "difficulty": 1,
-      "question": "Define...",
-      "correctAnswer": "...",
-      "explanation": "..."
+      "question": "According to the notes, define...",
+      "correctAnswer": "[exact definition from material]",
+      "explanation": "Found in section discussing: [reference]"
     }
   ]
 }
 
-STUDY MATERIAL:
-${notesContent.slice(0, 12000)}`;
+STUDY MATERIAL TO USE (base ALL questions on this content only):
+${notesContent.slice(0, 10000)}`;
 
-    log('info', 'Generating questions...');
+    log('info', 'Generating questions focused on: ' + (contextInfo.subject || 'material topics') + '...');
     
     const response = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -1150,69 +1164,113 @@ ${notesContent.slice(0, 12000)}`;
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: 'You are an expert at creating educational assessments based ONLY on provided material. Return ONLY valid JSON, no markdown formatting. Each question must be directly derived from the study material.' },
+          { role: 'system', content: 'You create quiz questions using ONLY the provided material. NEVER invent facts. Return ONLY raw JSON, no markdown code blocks, no explanations.' },
           { role: 'user', content: prompt }
         ],
-        max_tokens: 4000,
-        temperature: 0.5
+        max_tokens: 3500,
+        temperature: 0.3
       })
     });
     
     if (!response.ok) {
-      throw new Error('Failed to generate questions: ' + response.status);
+      throw new Error('API request failed with status ' + response.status);
     }
-    
+
     const result = await response.json();
     let content = result.choices?.[0]?.message?.content || '';
+
+    // Clean up the response - remove markdown code blocks if present
+    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     // Try to extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       content = jsonMatch[0];
     }
-    
+
+    log('info', 'Processing AI response...');
+
     // Validate JSON before parsing
     try {
       const quizData = JSON.parse(content);
-      
+
       if (!quizData.questions || !Array.isArray(quizData.questions)) {
-        throw new Error('Invalid response format: missing questions array');
+        throw new Error('Invalid format: missing questions array. The AI did not return proper quiz data.');
       }
-      
+
+      if (quizData.questions.length === 0) {
+        throw new Error('No questions were generated. The material may be too short or unclear.');
+      }
+
       // Validate each question has required fields
+      let validQuestions = [];
       for (let i = 0; i < quizData.questions.length; i++) {
         const q = quizData.questions[i];
+        
+        // Check required fields
         if (!q.id || !q.type || !q.question) {
-          throw new Error(`Question ${i+1} is missing required fields`);
+          log('warn', `Skipping question ${i+1}: missing required fields`);
+          continue;
         }
-        if (q.type === 'mcq' && (!q.options || !q.correctAnswer)) {
-          throw new Error(`MCQ question ${i+1} is missing options or correctAnswer`);
+        
+        // Validate MCQ structure
+        if (q.type === 'mcq') {
+          if (!q.options || typeof q.options !== 'object') {
+            log('warn', `Skipping MCQ ${i+1}: missing options`);
+            continue;
+          }
+          if (!q.correctAnswer || !['A','B','C','D'].includes(q.correctAnswer)) {
+            log('warn', `Skipping MCQ ${i+1}: invalid correctAnswer`);
+            continue;
+          }
+          // Ensure all 4 options exist
+          if (!q.options.A || !q.options.B || !q.options.C || !q.options.D) {
+            log('warn', `Skipping MCQ ${i+1}: incomplete options (need A, B, C, D)`);
+            continue;
+          }
         }
+        
+        // Validate short answer/calculation structure
         if ((q.type === 'shortanswer' || q.type === 'calculation') && !q.correctAnswer) {
-          throw new Error(`Question ${i+1} is missing correctAnswer`);
+          log('warn', `Skipping ${q.type} ${i+1}: missing correctAnswer`);
+          continue;
         }
+        
+        // Validate type is one of the allowed values
+        if (!['mcq', 'shortanswer', 'calculation'].includes(q.type)) {
+          log('warn', `Skipping question ${i+1}: invalid type '${q.type}'`);
+          continue;
+        }
+        
+        validQuestions.push(q);
       }
       
+      if (validQuestions.length === 0) {
+        throw new Error('No valid questions were generated. All questions failed validation.');
+      }
+
       currentQuiz = {
-        questions: quizData.questions,
+        questions: validQuestions,
         userAnswers: {},
         submitted: false
       };
-      
+
       // Save to localStorage
       localStorage.setItem('ls_currentQuiz', JSON.stringify(currentQuiz));
-      
+
       // Show quiz UI
       renderQuiz();
-      
-      log('ok', `Generated ${currentQuiz.questions.length} practice questions.`);
+
+      log('ok', `Generated ${currentQuiz.questions.length} valid practice questions.`);
     } catch (parseError) {
-      throw new Error('Invalid JSON response from AI: ' + parseError.message + '. Raw response: ' + content.slice(0, 500));
+      log('err', 'JSON parse error: ' + parseError.message);
+      log('info', 'Raw response preview: ' + content.slice(0, 300));
+      throw new Error('Failed to parse quiz data. The AI response was malformed. Try again with clearer study materials.');
     }
-    
+
   } catch (e) {
     log('err', 'Quiz generation failed: ' + e.message);
-    alert('Failed to generate questions: ' + e.message + '\n\nTip: Make sure your study material contains sufficient content and try again.');
+    alert('Failed to generate questions: ' + e.message + '\n\nTips:\n- Ensure your study material has at least 100 words\n- Use clear, structured notes with defined concepts\n- Try pasting your notes directly if file upload fails');
   } finally {
     generateQuizBtn.disabled = false;
     generateQuizBtn.textContent = '🚀 Generate Practice Questions';
