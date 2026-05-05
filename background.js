@@ -41,8 +41,15 @@ async function handleStart(sendResponse) {
     const { isRecording } = await chrome.storage.session.get({ isRecording: false });
     if (isRecording) { sendResponse({ success: false, error: 'Already recording.' }); return; }
 
+    // Get the currently active tab to capture audio from it
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.id) {
+      sendResponse({ success: false, error: 'No active tab found. Please make sure the lecture tab is open and active.' });
+      return;
+    }
+
     const streamId = await new Promise((resolve, reject) => {
-      chrome.tabCapture.getMediaStreamId({}, (id) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: activeTab.id }, (id) => {
         if (chrome.runtime.lastError || !id)
           reject(new Error(chrome.runtime.lastError?.message || 'tabCapture failed'));
         else resolve(id);
