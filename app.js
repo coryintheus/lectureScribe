@@ -185,6 +185,8 @@ startBtn.addEventListener('click', async () => {
       }
     });
     
+    log('info', 'Stream obtained. Video tracks: ' + stream.getVideoTracks().length + ', Audio tracks: ' + stream.getAudioTracks().length);
+    
     // Check if audio track exists
     const audioTrack = stream.getAudioTracks()[0];
     if (!audioTrack) {
@@ -197,6 +199,40 @@ startBtn.addEventListener('click', async () => {
     recordedStream = stream;
     audioChunks = [];
     
+    // Wait for track to be ready (macOS fix)
+    log('info', 'Waiting for audio track to initialize...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Re-check track state after waiting
+    log('info', 'Audio track state: ' + audioTrack.readyState);
+    log('info', 'Audio track enabled: ' + audioTrack.enabled);
+    log('info', 'Audio track muted: ' + audioTrack.muted);
+    
+    if (audioTrack.readyState !== 'live') {
+      log('err', 'Audio track is not live (state: ' + audioTrack.readyState + '). Try selecting the tab again and ensure audio is playing.');
+      stream.getTracks().forEach(t => t.stop());
+      startBtn.disabled = false;
+      return;
+    }
+    
+    if (!audioTrack.enabled || audioTrack.muted) {
+      log('err', 'Audio track is disabled or muted. Make sure the tab has audio playing and you enabled "Share system audio".');
+      stream.getTracks().forEach(t => t.stop());
+      startBtn.disabled = false;
+      return;
+    }
+    
+    // Get only audio tracks for MediaRecorder
+    const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+    
+    log('info', 'Created audio-only stream with ' + audioOnlyStream.getAudioTracks().length + ' track(s)');
+    if (!audioOnlyStream.getAudioTracks().length) {
+      log('err','No audio track in stream. Make sure to enable "Share system audio" in the browser prompt.');
+      stream.getTracks().forEach(t => t.stop());
+      startBtn.disabled = false;
+      return;
+    }
+    
     // Determine supported mime type
     const mimeType = [
       'audio/webm;codecs=opus',
@@ -205,50 +241,76 @@ startBtn.addEventListener('click', async () => {
       'audio/ogg'
     ].find(t => MediaRecorder.isTypeSupported(t)) || '';
     
-    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        audioChunks.push(e.data);
-      }
-    };
-    
-    mediaRecorder.onerror = (e) => {
-      log('err','Recording error: ' + (e.error?.message || 'unknown'));
-      stopRecording();
-    };
-    
-    mediaRecorder.onstop = () => {
-      // Stop all tracks
-      stream.getTracks().forEach(t => t.stop());
-      recordedStream = null;
+    try {
+      mediaRecorder = new MediaRecorder(audioOnlyStream, mimeType ? { mimeType } : {});
       
-      if (!audioChunks.length) {
-        log('err','No audio data captured.');
+      // Add debug logging for MediaRecorder state
+      log('info', 'MediaRecorder created. State: ' + mediaRecorder.state);
+      log('info', 'MediaRecorder mimeType: ' + (mediaRecorder.mimeType || 'default'));
+      log('info', 'Audio track settings: sampleRate=' + audioTrack.getSettings().sampleRate + ', channelCount=' + audioTrack.getSettings().channelCount);
+      
+      // CRITICAL FIX: Set up event handlers BEFORE calling start()
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunks.push(e.data);
+          log('info', 'Data received: ' + e.data.size + ' bytes (total chunks: ' + audioChunks.length + ')');
+        } else if (e.data) {
+          log('warn', 'Empty data chunk received');
+        }
+      };
+      
+      mediaRecorder.onerror = (e) => {
+        log('err','Recording error: ' + (e.error?.message || 'unknown'));
+        console.error('MediaRecorder error:', e);
+        stopRecording();
+      };
+      
+      mediaRecorder.onwarning = (e) => {
+        log('warn','MediaRecorder warning: ' + (e.message || 'unknown'));
+        console.warn('MediaRecorder warning:', e);
+      };
+      
+      mediaRecorder.onstop = () => {
+        // Stop all tracks
+        stream.getTracks().forEach(t => t.stop());
+        recordedStream = null;
+        
+        if (!audioChunks.length) {
+          log('err','No audio data captured.');
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          stopBtn.classList.remove('active');
+          return;
+        }
+        
+        const finalMimeType = mediaRecorder.mimeType || 'audio/webm';
+        uploadedBlob = new Blob(audioChunks, { type: finalMimeType });
+        audioChunks = [];
+        mediaRecorder = null;
+        
+        const sizeMB = (uploadedBlob.size / 1024 / 1024).toFixed(1);
+        log('ok','Audio ready in memory: ' + sizeMB + ' MB. Click Transcribe.');
+        
+        isRecording = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
         stopBtn.classList.remove('active');
-        return;
-      }
+        transcribeBtn.disabled = false;
+        setStatus('active','Audio Ready');
+        setProgress(100,'Audio ready in memory');
+      };
       
-      const finalMimeType = mediaRecorder.mimeType || 'audio/webm';
-      uploadedBlob = new Blob(audioChunks, { type: finalMimeType });
-      audioChunks = [];
-      mediaRecorder = null;
+      // Start recording with smaller timeslice for more frequent chunks
+      mediaRecorder.start(500);
+      log('ok', 'MediaRecorder started with mimeType: ' + (mediaRecorder.mimeType || 'default'));
+      log('info', 'MediaRecorder state after start: ' + mediaRecorder.state);
       
-      const sizeMB = (uploadedBlob.size / 1024 / 1024).toFixed(1);
-      log('ok','Audio ready in memory: ' + sizeMB + ' MB. Click Transcribe.');
-      
-      isRecording = false;
+    } catch (e) {
+      log('err','Failed to create/start MediaRecorder: ' + e.message);
+      stream.getTracks().forEach(t => t.stop());
       startBtn.disabled = false;
-      stopBtn.disabled = true;
-      stopBtn.classList.remove('active');
-      transcribeBtn.disabled = false;
-      setStatus('active','Audio Ready');
-      setProgress(100,'Audio ready in memory');
-    };
-    
-    mediaRecorder.start(5000);
+      return;
+    }
     
     isRecording = true;
     stopBtn.disabled = false;
@@ -265,10 +327,16 @@ startBtn.addEventListener('click', async () => {
       }
     };
     
+    // Log initial state
+    log('info', 'Audio track settings: enabled=' + audioTrack.enabled + ', muted=' + audioTrack.muted);
+    log('info', 'Audio track state: ' + audioTrack.readyState);
+    log('info', 'MediaRecorder is recording: ' + (mediaRecorder && mediaRecorder.state === 'recording'));
+
   } catch(e) {
     log('err','Capture failed: ' + e.message);
     startBtn.disabled = false;
-    log('warn','Tip: Make sure you select a window/tab with audio and enable "Share system audio".');
+    log('warn','Tip: On macOS, make sure to: 1) Select the tab with audio playing, 2) Check "Also share tab audio" in the prompt, 3) Ensure audio is actually playing in that tab.');
+    console.error('Capture error:', e);
   }
 });
 
