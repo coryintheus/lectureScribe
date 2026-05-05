@@ -1,1 +1,101 @@
-Nothing should be ignored based on the provided file changes. The modified files (`popup.html` and `popup.js`) are source code files that should not be added to .gitignore.
+```gitignore
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+*.js.map
+*.min.js
+*.bundle.js
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+
+# Compiled and binary
+*.o
+*.obj
+*.so
+*.dll
+*.exe
+*.a
+*.lib
+*.dylib
+*.jar
+*.war
+*.class
+
+# OS generated
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Testing
+.coverage
+htmlcov/
+coverage/
+.pytest_cache/
+.mypy_cache/
+
+# Java
+target/
+.gradle/
+*.class
+*.jar
+*.war
+*.ear
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Compressed
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```

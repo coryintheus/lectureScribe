@@ -527,7 +527,9 @@
 <div class="tab-nav">
   <button class="tab-btn active" data-tab="notes-tab">📝 Notes & Recording</button>
   <button class="tab-btn" data-tab="practice-tab">📚 Practice Quiz</button>
+  <button class="tab-btn" data-tab="history-tab">📊 History & Saved</button>
   <button class="tab-btn" data-tab="save-tab">💾 Save Progress</button>
+  <button class="tab-btn" data-tab="help-tab">❓ How to Use</button>
 </div>
 
 <!-- ─── Main Content ─── -->
@@ -807,7 +809,42 @@
   <!-- End TAB 2: PRACTICE QUIZ -->
 
   <!-- ════════════════════════════════════════════════════ -->
-  <!-- TAB 3: SAVE PROGRESS -->
+  <!-- TAB 3: HISTORY & SAVED -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="history-tab">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Quiz History -->
+    <div class="section">
+      <div class="section-header">📊 Quiz History</div>
+      <div class="section-body">
+        <div id="quizHistoryList" class="quiz-container">
+          <div style="color:var(--text-faint);font-style:italic;">No quiz results yet. Complete a practice quiz to see your history here.</div>
+        </div>
+        <div class="question-actions" style="margin-top:12px;">
+          <button class="btn danger" id="clearHistoryBtn">🗑️ Clear History</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Saved Questions -->
+    <div class="section">
+      <div class="section-header">⭐ Saved Questions</div>
+      <div class="section-body">
+        <div id="savedQuestionsListHistory" class="quiz-container">
+          <div style="color:var(--text-faint);font-style:italic;">No saved questions yet. Click ⭐ on any question to save it.</div>
+        </div>
+        <div class="question-actions" style="margin-top:12px;">
+          <button class="btn danger" id="clearSavedBtn">🗑️ Clear Saved Questions</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- End TAB 3: HISTORY & SAVED -->
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- TAB 4: SAVE PROGRESS -->
   <!-- ════════════════════════════════════════════════════ -->
   <div class="tab-content" id="save-tab">
     <div style="display:flex;flex-direction:column;gap:20px;">
@@ -853,7 +890,98 @@
     </div>
 
   </div>
-  <!-- End TAB 3: SAVE PROGRESS -->
+  <!-- End TAB 4: SAVE PROGRESS -->
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- TAB 5: HOW TO USE -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="help-tab">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Getting Started -->
+    <div class="section">
+      <div class="section-header">🚀 Getting Started</div>
+      <div class="section-body">
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>Welcome to LectureScribe!</strong> This tool helps you convert your lecture notes, recordings, and documents into interactive practice quizzes using AI.
+        </div>
+        <ol style="font-size:12px;line-height:2;color:var(--text-dim);padding-left:20px;">
+          <li><strong>Step 1:</strong> Enter your Groq API key in the "Notes & Recording" tab (get one free at <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>)</li>
+          <li><strong>Step 2:</strong> Upload your notes (PDF, DOCX, TXT) or record audio from lectures</li>
+          <li><strong>Step 3:</strong> Click "Generate Questions" to create a practice quiz</li>
+          <li><strong>Step 4:</strong> Answer questions and submit to see your score</li>
+          <li><strong>Step 5:</strong> Save important questions or export your progress to use on other devices</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <div class="section">
+      <div class="section-header">✨ Features</div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:12px;color:var(--text-dim);">
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">📄 File Upload</strong><br/>
+            Supports PDF, DOCX, and TXT files of any size. Text is automatically extracted.
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">🎤 Audio Recording</strong><br/>
+            Record lectures directly or capture system audio from any tab playing video.
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">📝 Smart Quizzes</strong><br/>
+            AI generates MCQs, short answer, and calculation questions based ONLY on your material.
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">💾 Progress Sync</strong><br/>
+            Export/import your quiz history and saved questions between browsers.
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">⭐ Save Questions</strong><br/>
+            Bookmark difficult questions for later review in the History tab.
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);">
+            <strong style="color:var(--accent);">📊 Quiz History</strong><br/>
+            Track all your quiz attempts with detailed results and scores.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tips -->
+    <div class="section">
+      <div class="section-header">💡 Tips for Best Results</div>
+      <div class="section-body">
+        <ul style="font-size:12px;line-height:2;color:var(--text-dim);padding-left:20px;">
+          <li>Use clear, well-organized notes for better question generation</li>
+          <li>For PDFs, ensure text is selectable (not scanned images)</li>
+          <li>When recording audio, minimize background noise</li>
+          <li>Save questions you get wrong to review them later</li>
+          <li>Use the difficulty selector to match your exam level</li>
+          <li>Export your progress regularly as a backup</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="section">
+      <div class="section-header">🔧 Troubleshooting</div>
+      <div class="section-body">
+        <div style="font-size:12px;line-height:1.8;color:var(--text-dim);">
+          <strong style="color:var(--yellow);">Questions seem irrelevant?</strong><br/>
+          The AI only uses content from your uploaded material. Make sure your notes contain the topics you want to be tested on.<br/><br/>
+          <strong style="color:var(--yellow);">Score shows 0/0?</strong><br/>
+          Make sure you've answered at least one question before submitting. All questions must have valid correct answers defined.<br/><br/>
+          <strong style="color:var(--yellow);">File upload errors?</strong><br/>
+          Ensure PDFs are text-based (not image scans). For DOCX files, use standard Word format.<br/><br/>
+          <strong style="color:var(--yellow);">API errors?</strong><br/>
+          Check that your Groq API key is valid and has available credits.
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- End TAB 5: HOW TO USE -->
 
 </div>
 <!-- End container -->
