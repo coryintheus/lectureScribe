@@ -274,21 +274,86 @@ async function getBlobFromOffscreen() {
   return new Blob([combined], { type: info.mimeType });
 }
 
-// ─── Upload Audio File ────────────────────────────────────────
+// ─── Upload File Handler (Audio, Video, or Documents) ─────────
 uploadBtn.addEventListener('click', () => uploadInput.click());
 uploadInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const ok = /\.(mp3|mp4|wav|m4a|ogg|webm|aac|flac)$/i.test(file.name)
-             || file.type.startsWith('audio/') || file.type.startsWith('video/');
-  if (!ok) { log('err','Unsupported file type: ' + file.type); return; }
-
+  
+  // Check file type
+  const isAudio    = file.type.startsWith('audio/');
+  const isVideo    = file.type.startsWith('video/');
+  const isDocument = /\.(pdf|doc|docx|txt)$/i.test(file.name);
+  
+  if (!isAudio && !isVideo && !isDocument) {
+    log('err','Unsupported file type: ' + file.type);
+    return;
+  }
+  
   const sizeMB = (file.size / 1024 / 1024).toFixed(1);
   log('info','File loaded: ' + file.name + ' (' + sizeMB + ' MB)');
-  setProgress(100,'File ready'); setStatus('active','File Loaded');
-  uploadedBlob = file;  // hold in popup memory — same approach as offscreen blob
-  transcribeBtn.disabled = false;
-  log('ok','File ready. Click Transcribe.');
+  
+  if (isDocument) {
+    // Extract text from document using FileReader
+    setProgress(30, 'Extracting text from document...');
+    try {
+      let text = '';
+      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        text = await file.text();
+      } else if (file.type === 'application/pdf') {
+        // For PDFs, try to extract as text (works for text-based PDFs)
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        // Simple text extraction - look for readable strings in the binary
+        let raw = '';
+        for (let i = 0; i < uint8Array.length && raw.length < 500000; i++) {
+          const char = uint8Array[i];
+          if (char >= 32 && char <= 126) raw += String.fromCharCode(char);
+        }
+        // Clean up the extracted text
+        text = raw.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!text || text.length < 50) {
+          log('warn', 'Could not extract text from this PDF. It may be image-based. Try converting to text first.');
+          setProgress(0, 'Extraction failed');
+          return;
+        }
+      } else if (/\.(doc|docx)$/.test(file.name)) {
+        // For Word docs, try basic text extraction
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        let raw = '';
+        for (let i = 0; i < uint8Array.length && raw.length < 500000; i++) {
+          const char = uint8Array[i];
+          if (char >= 32 && char <= 126) raw += String.fromCharCode(char);
+        }
+        text = raw.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!text || text.length < 50) {
+          log('warn', 'Could not extract text from this Word document.');
+          setProgress(0, 'Extraction failed');
+          return;
+        }
+      }
+      
+      setProgress(100, 'Text extracted');
+      setStatus('active', 'Text Ready');
+      uploadedBlob = new Blob([text], { type: 'text/plain' });
+      uploadedBlob._isText = true;
+      uploadedBlob._text = text;
+      transcribeBtn.disabled = false;
+      log('ok', 'Text extracted (' + text.split(/\s+/).length + ' words). Click Transcribe.');
+    } catch (err) {
+      log('err', 'Text extraction failed: ' + err.message);
+      setProgress(0, 'Extraction failed');
+    }
+  } else {
+    // Audio or video file - send directly to Whisper
+    setProgress(100, 'File ready');
+    setStatus('active', 'File Loaded');
+    uploadedBlob = file;
+    transcribeBtn.disabled = false;
+    log('ok', 'File ready. Click Transcribe.');
+  }
+  
   uploadInput.value = '';
 });
 
@@ -317,7 +382,7 @@ async function transcribeChunk(blob, apiKey, model, idx, total) {
               blob.type.includes('m4a') ? '.m4a' : '.webm';
   fd.append('file', blob, 'audio_' + idx + ext);
   fd.append('model', model);
-  fd.append('response_format', 'json');
+  fd.append('response_format', 'text');
   fd.append('language', 'en');
   
   const res = await groqFetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -328,7 +393,7 @@ async function transcribeChunk(blob, apiKey, model, idx, total) {
     const errText = await res.text();
     throw new Error('Whisper chunk ' + idx + '/' + total + ' — ' + res.status + ': ' + errText);
   }
-  return (await res.json()).text || '';
+  return await res.text();
 }
 
 // ─── Transcribe ───────────────────────────────────────────────
@@ -347,39 +412,56 @@ transcribeBtn.addEventListener('click', async () => {
     let blob;
     if (uploadedBlob) {
       blob = uploadedBlob;
-      log('info','Using uploaded file: ' + (blob.size/1024/1024).toFixed(1) + ' MB');
+      // Check if it's extracted text from a document
+      if (blob._isText) {
+        log('info', 'Using extracted text: ' + wordCount(blob._text) + ' words');
+        transcriptFull = blob._text;
+        chrome.storage.local.set({ transcript: transcriptFull, model });
+        modelTag.textContent = model;
+        setProgress(100, 'Text ready!');
+        log('ok', 'Done: ' + wordCount(transcriptFull) + ' words.');
+        
+        notesOutput.innerHTML = '';
+        notesOutput.classList.remove('rendered');
+        notesOutput.textContent = '📝 TEXT PREVIEW:\n\n' + transcriptFull.slice(0, 600) + (transcriptFull.length > 600 ? '…' : '');
+        
+        transcribeBtn.disabled = false;
+        notesBtn.disabled = false;
+        setStatus('active', 'Text Ready');
+        return;
+      }
+      log('info', 'Using uploaded file: ' + (blob.size/1024/1024).toFixed(1) + ' MB');
     } else {
-      log('info','Fetching audio from offscreen\u2026 (may take a moment for large recordings)');
-      setProgress(10,'Fetching audio chunks from offscreen\u2026');
+      log('info', 'Fetching audio from offscreen… (may take a moment for large recordings)');
+      setProgress(10, 'Fetching audio chunks from offscreen…');
       blob = await getBlobFromOffscreen();
     }
 
     const totalMB = (blob.size / 1024 / 1024).toFixed(1);
     const chunks  = splitBlob(blob, 8 * 1024 * 1024);
     chunkTag.textContent = chunks.length > 1 ? chunks.length + ' chunks' : '';
-    log('info', totalMB + ' MB \u2192 ' + chunks.length + ' audio chunk(s).');
+    log('info', totalMB + ' MB → ' + chunks.length + ' audio chunk(s).');
 
     const parts = [];
     for (let i = 0; i < chunks.length; i++) {
       setProgress(Math.round(15 + (i / chunks.length) * 75),
-        chunks.length > 1 ? 'Whisper chunk ' + (i+1) + '/' + chunks.length + '\u2026' : 'Transcribing\u2026');
+        chunks.length > 1 ? 'Whisper chunk ' + (i+1) + '/' + chunks.length + '…' : 'Transcribing…');
       parts.push(await transcribeChunk(chunks[i], data.groqApiKey, model, i+1, chunks.length));
-      log('ok','Chunk ' + (i+1) + '/' + chunks.length + ' transcribed.');
+      log('ok', 'Chunk ' + (i+1) + '/' + chunks.length + ' transcribed.');
     }
 
     transcriptFull = parts.join(' ').trim();
     chrome.storage.local.set({ transcript: transcriptFull, model });
     modelTag.textContent = model;
-    setProgress(100,'Transcription complete!');
-    log('ok','Done: ' + wordCount(transcriptFull) + ' words.');
+    setProgress(100, 'Transcription complete!');
+    log('ok', 'Done: ' + wordCount(transcriptFull) + ' words.');
 
     notesOutput.innerHTML = '';
     notesOutput.classList.remove('rendered');
-    notesOutput.textContent = '\uD83D\uDCDD TRANSCRIPT PREVIEW:\n\n'
-      + transcriptFull.slice(0, 600) + (transcriptFull.length > 600 ? '\u2026' : '');
+    notesOutput.textContent = '📝 TRANSCRIPT PREVIEW:\n\n' + transcriptFull.slice(0, 600) + (transcriptFull.length > 600 ? '…' : '');
 
     transcribeBtn.disabled = false; notesBtn.disabled = false;
-    setStatus('active','Transcribed');
+    setStatus('active', 'Transcribed');
 
   } catch(e) {
     log('err','Transcription failed: ' + e.message);
@@ -387,7 +469,6 @@ transcribeBtn.addEventListener('click', async () => {
     transcribeBtn.disabled = false; notesBtn.disabled = !transcriptFull;
   }
 });
-
 // ─── Compress transcript if too long (avoids TPM spikes) ──────
 // Splits transcript into sections, summarises each to key points only
 async function compressTranscript(transcript, apiKey, subjectCtx) {
