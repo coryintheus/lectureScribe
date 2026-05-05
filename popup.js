@@ -417,7 +417,7 @@ async function compressTranscript(transcript, apiKey, subjectCtx) {
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: 'Extract ALL key concepts, facts, definitions, formulas, and important statements from this transcript section into a dense bullet-point list. ' + subjectCtx + ' Preserve all technical terms exactly. No prose, no padding — only information-dense bullets.' },
+          { role: 'system', content: 'Extract ALL key concepts, facts, definitions, formulas, and important statements from this transcript section into a dense bullet-point list. ' + subjectCtx + ' Preserve all technical terms exactly. Extract ONLY what is in the transcript — do not add external information. No prose, no padding — only information-dense bullets.' },
           { role: 'user',   content: 'SECTION ' + (i+1) + '/' + sections.length + ':\n\n' + sections[i] }
         ],
         max_tokens: 1200,
@@ -456,8 +456,8 @@ notesBtn.addEventListener('click', async () => {
   log('info','Generating ' + style + ' notes' + (includePractice ? ' with practice questions' : '') + '\u2026');
 
   const subjectCtx = subject
-    ? 'The subject/course is: "' + subject + '". Use your training knowledge to inform, correct, and enrich the notes.'
-    : 'Infer the academic subject from context. Use your training knowledge to inform, correct, and enrich the notes.';
+    ? 'The subject/course is: "' + subject + '". Use this context ONLY to correctly interpret technical terms and fix transcription errors. Do NOT add external knowledge beyond what the lecture covers.'
+    : 'Infer the academic subject from context. Use this ONLY to correctly interpret technical terms and fix transcription errors. Do NOT add external knowledge beyond what the lecture covers.';
 
   try {
     // ── Step 1: Compress if transcript is too long ───────────────
@@ -510,24 +510,35 @@ FORMATTING (mandatory):
 - \`code\` for code, syntax, or precise notation
 - > blockquote for formal definitions
 - ### headings for major sections
-- Numbered lists for processes; bullet lists for properties`;
+- Numbered lists for processes; bullet lists for properties
+
+CONTENT RULES:
+- Notes must be STRICTLY based on the lecture content provided
+- Do NOT add external knowledge, analogies, or supplementary information unless explicitly correcting a clear transcription error
+- If the lecture doesn't cover something, don't invent it — stay faithful to what was actually said
+- Concise, revision-friendly bullets over verbose prose`;
 
     const notePrompts = {
       exam: `You are an expert tutor generating EXAM-READY STUDY NOTES. NOT a transcriber, NOT a summariser.
 
 RULES:
 - Teach the material as a tutor would — explain WHY, not just WHAT.
-- SUPPLEMENT with your own knowledge: add analogies, context, exam pitfalls the lecture may have missed. Label additions "(supplemented)".
+- Be concise and revision-friendly: cut fluff, keep only high-yield points.
 - Think like an examiner: what would be tested and how?
 - Flag common misconceptions.
 ${subjectCtx}
 ${FORMATTING}
 ${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
-Generate exam-style practice questions covering all key concepts. Include a mix of:
-- Multiple choice questions with 4 options (mark correct answer)
-- Short answer questions testing understanding
-- Application/scenario-based questions
-Provide answers/explanations after each question.` : ''}
+Generate TWO types of questions:
+**A. Comprehension Check (5-7 questions)**
+- Short, direct questions testing basic understanding
+- Quick self-check format with brief answers
+
+**B. Exam-Style Questions (5-8 questions)**
+- Multiple choice with 4 options (mark correct answer + explain why others are wrong)
+- Short answer requiring application of concepts
+- Scenario-based problems testing deeper understanding
+Provide full answers/explanations after each question.` : ''}
 
 ### 🧠 Core Concepts Explained
 Per concept: clear explanation with intuition, analogy if helpful, why it matters. Use tables to compare items.
@@ -551,43 +562,48 @@ Mnemonics, memory hooks, intuitive shortcuts for the hardest ideas.`,
 ${subjectCtx}
 ${FORMATTING}
 ${includePractice ? `\n### 📝 Practice Questions (15-20 questions)
-Add additional practice questions beyond the cue column. Include varied question types with full answers.` : ''}
+**A. Quick Recall (8-10 questions)** - Direct fact/concept checks
+**B. Application Problems (7-10 questions)** - Scenario-based, multi-step reasoning
+Include varied question types with full answers.` : ''}
 
 ### Notes
-Detailed concept breakdowns enriched with your knowledge. Sub-headings, tables, LaTeX.
+Concise, exam-focused concept breakdowns. No verbose explanations — bullet points with key facts, formulas, relationships.
 
 ### Cue Column
 | Question / Cue | Key Answer Points |
 |----------------|------------------|
-15–20 self-test questions from foundational to advanced.
+15–20 self-test questions from foundational to advanced. Focus on what's testable.
 
 ### 📐 Formulas & Equations
-All formulas in LaTeX with variable definitions.
+All formulas in LaTeX with variable definitions. When to use each.
 
 ### Summary
-6–8 sentence synthesis explaining the conceptual landscape — how ideas connect, what must be deeply understood vs memorised.`,
+4–6 sentence synthesis of the absolute essentials — what MUST be memorised vs understood.`,
 
       outline: `You are an expert tutor. Create a COMPREHENSIVE STUDY OUTLINE enriched with your expertise.
 ${subjectCtx}
 ${FORMATTING}
 ${includePractice ? `\n### 📝 Practice Questions (10-15 questions)
-Add exam-style practice questions with answers covering all major topics.` : ''}
+**Comprehension:** 5-7 direct questions checking understanding
+**Exam-Style:** 5-8 application/problems with full solutions` : ''}
 
 # [Lecture Title]
 ## I. [Topic]
 ### A. Concept
 - **Definition**: (use > for formal)
-- **Explanation**: intuitive explanation beyond the lecture
+- **Key Points**: bullet list of essentials only
 - **Formula**: $formula$ with variable meanings
-- **Example**: concrete example
+- **Example**: one concrete example
 - **Common mistake**: what students get wrong
-Supplement gaps with your knowledge (label "(supplemented)").`,
+Be concise — revision notes, not prose.`,
 
       flashcards: `You are an expert tutor. Generate 25–35 EXAM-QUALITY flashcards testing deep understanding.
 ${subjectCtx}
 ${FORMATTING}
 ${includePractice ? `\n### 📝 Additional Practice Questions
-After the flashcards, add 10-15 longer-form practice questions with detailed answers.` : ''}
+After the flashcards, add:
+- 5-7 comprehension check questions (quick recall)
+- 5-8 exam-style problems with detailed solutions` : ''}
 
 Include: definition cards, mechanism cards, comparison cards ("difference between X and Y"), application cards ("in what scenario would you…"), and mistake cards ("what is wrong with this reasoning…").
 
@@ -598,13 +614,14 @@ Include: definition cards, mechanism cards, comparison cards ("difference betwee
 ${subjectCtx}
 ${FORMATTING}
 ${includePractice ? `\n### 📝 Practice Questions (10-12 questions)
-Add practice questions testing comprehension of the key concepts, with answers.` : ''}
+**Comprehension:** 5-6 quick-check questions
+**Application:** 5-6 exam-style problems with answers` : ''}
 
 ### 🎯 What This Topic Is Really About
-3–5 sentences explaining the conceptual essence — as a tutor to a confused student, not a recap of the lecture.
+2–3 sentences explaining the conceptual essence — as a tutor to a confused student.
 
 ### 🔑 Key Ideas (with depth)
-Each idea: what it is, why it exists, what it connects to.
+Each idea: what it is, why it exists, what it connects to. Bullet format.
 
 ### 📐 Formulas & Equations
 | Formula (LaTeX) | Name | What It Describes | When to Use |
@@ -613,7 +630,88 @@ Each idea: what it is, why it exists, what it connects to.
 | Term | Precise Definition | Memory Hook |
 
 ### ⚠️ Watch Out For
-Misconceptions, exam traps, edge cases.`
+Misconceptions, exam traps, edge cases.`,
+
+      concept: `You are an expert tutor creating a CONCEPT MAP for revision.
+${subjectCtx}
+${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions
+**Check Understanding:** 5-7 questions verifying concept relationships
+**Apply Knowledge:** 5-7 scenario problems testing connections between concepts` : ''}
+
+### Central Concept
+One-sentence essence of the topic.
+
+### Key Concepts & Relationships
+| Concept | Definition | Connects To | Why It Matters |
+Map how ideas link together.
+
+### Visual Structure
+Use indentation/arrows to show hierarchy: Main Idea → Sub-concept → Detail
+
+### Common Confusions
+Where students mix up related concepts. Clarify distinctions.`,
+
+      problem: `You are an expert tutor focusing on PROBLEM-SOLVING SKILLS.
+${subjectCtx}
+${FORMATTING}
+${includePractice ? `\n### 📝 Practice Problems (12-15 problems)
+**Guided Practice (5-7):** Step-by-step worked examples
+**Independent (7-8):** Full problems with answers only — test yourself` : ''}
+
+### Problem Types Covered
+List each type of problem this lecture addresses.
+
+### Solution Framework
+For each problem type:
+1. **Identify**: What type is this? What clues to look for?
+2. **Approach**: Step-by-step method
+3. **Formula/Tools**: What equations/concepts apply
+4. **Worked Example**: One complete example
+5. **Common Errors**: What goes wrong
+
+### Quick Reference
+Condensed table of problem types → approaches → key formulas.`,
+
+      compare: `You are an expert tutor creating COMPARE & CONTRAST notes.
+${subjectCtx}
+${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions
+**Distinguish:** 5-7 "What's the difference between X and Y?" questions
+**Apply:** 5-7 scenarios requiring choice between similar concepts/methods` : ''}
+
+### Comparison Tables
+| Feature | Concept A | Concept B | Concept C |
+Compare all major concepts side-by-side.
+
+### When to Use Each
+Decision tree or bullets: "If you see X, use Y because..."
+
+### Similarities That Confuse
+What makes these concepts easy to mix up. How to tell them apart.
+
+### Key Distinctions
+The 3-5 critical differences that matter for exams.`,
+
+      timeline: `You are an expert tutor creating a TIMELINE/SEQUENCE overview.
+${subjectCtx}
+${FORMATTING}
+${includePractice ? `\n### 📝 Practice Questions
+**Sequence Check:** 5-7 "What comes next?" or ordering questions
+**Causal Links:** 5-7 questions about why each step leads to the next` : ''}
+
+### Chronological/Logical Sequence
+| Step/Stage | What Happens | Why It Matters | Key Terms |
+Order events, processes, or procedures.
+
+### Dependencies
+What must happen before X? What does X enable?
+
+### Memory Aids
+Mnemonics or patterns to remember the sequence.
+
+### Critical Transitions
+Where things commonly go wrong or get confusing.`
     };
 
     const notesRes = await groqFetch('https://api.groq.com/openai/v1/chat/completions', {
